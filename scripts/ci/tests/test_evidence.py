@@ -165,43 +165,78 @@ class EvidenceTests(unittest.TestCase):
         e.finalize(self.root)
         (self.root / "release-attestation.jsonl").write_text("signed fixture")
 
-    def test_publication_resumes_matching_draft_and_is_idempotent(self):
+    def publication_api(self, fresh=False):
         self.final_fixture()
         files = {p.name: p for p in self.root.iterdir()}
-        release = {"target_commitish": SHA, "draft": True, "immutable": False, "assets": [], "html_url": "https://example.invalid/release"}
-        first = next(iter(files.values()))
-        release["assets"].append({"name": first.name, "digest": "sha256:" + e.digest(first)})
-        uploaded = []
-        def fake_gh(*args):
-            if args[0] == "api":
-                return json.dumps({"enabled": True} if args[1].endswith("immutable-releases") else release)
+        marker = '<!-- ios-release-handoff-sha256:' + e.digest(self.root / 'release-manifest.json') + ' -->'
+        release = {"id": 42, "tag_name": "v1.7.0", "body": marker, "draft": True,
+                   "immutable": False, "assets": [], "html_url": "https://example.invalid/release"}
+        state = {"release": None if fresh else release, "tag": None if fresh else SHA,
+                 "enabled": True, "uploaded": [], "created": 0, "duplicates": False}
+        def fake_gh(*args, data=None):
             if args[:2] == ("release", "upload"):
-                file = Path(args[3]); uploaded.append(file.name)
+                file = Path(args[3]); state["uploaded"].append(file.name)
                 release["assets"].append({"name": file.name, "digest": "sha256:" + e.digest(file)})
-            elif args[:2] == ("release", "edit"):
-                self.assertEqual(set(files), {a["name"] for a in release["assets"]})
-                release.update(draft=False, immutable=True)
-            else: self.fail(f"Unexpected mutation: {args}")
-            return ""
+                return ""
+            self.assertEqual(args[0], 'api')
+            endpoint = args[1]
+            if endpoint.endswith('immutable-releases'): return json.dumps({'enabled': state['enabled']})
+            if endpoint.endswith('releases?per_page=100'):
+                self.assertEqual(args[2:], ('--paginate', '--slurp'))
+                entries = [state['release']] if state['release'] else []
+                return json.dumps([entries + entries if state['duplicates'] else entries])
+            if endpoint.endswith('git/refs'):
+                self.assertIsNone(state['tag']); self.assertEqual(data, {'ref': 'refs/tags/v1.7.0', 'sha': SHA})
+                state['tag'] = data['sha']; return '{}'
+            if endpoint.endswith('/releases'):
+                self.assertIsNone(state['release']); self.assertEqual(state['tag'], SHA)
+                self.assertNotIn('target_commitish', data)
+                release.update(data); state['release'] = release; state['created'] += 1
+            elif endpoint.endswith('/releases/42'):
+                if data:
+                    self.assertEqual(data, {'draft': False})
+                    self.assertEqual(set(files), {a['name'] for a in release['assets']})
+                    release.update(draft=False, immutable=True)
+            else: self.fail(f'Unexpected API: {args}')
+            return json.dumps(release)
         def existing(*args, **kwargs):
-            return subprocess.CompletedProcess(args, 0, json.dumps(release), "")
-        with patch("publish_release.tag_commit", return_value=SHA), patch("publish_release.gh", side_effect=fake_gh), patch("publish_release.subprocess.run", side_effect=existing):
+            return subprocess.CompletedProcess(args, 0 if state['tag'] else 1, '{}', '' if state['tag'] else 'HTTP 404')
+        return files, release, state, fake_gh, existing
+
+    def test_publication_resumes_matching_draft_and_is_idempotent(self):
+        files, release, state, fake_gh, existing = self.publication_api()
+        first = next(iter(files.values()))
+        release['assets'].append({'name': first.name, 'digest': 'sha256:' + e.digest(first)})
+        with patch('publish_release.tag_commit', side_effect=lambda *_: state['tag']), patch('publish_release.gh', side_effect=fake_gh), patch('publish_release.subprocess.run', side_effect=existing):
             publish(self.root)
-            self.assertEqual(set(uploaded), set(files) - {first.name})
-            uploaded.clear()
+            self.assertEqual(set(state['uploaded']), set(files) - {first.name})
+            state['uploaded'].clear()
             publish(self.root)
-            self.assertEqual(uploaded, [])
+            self.assertEqual(state['uploaded'], [])
+            self.assertEqual(state['created'], 0)
+
+    def test_fresh_draft_creates_and_peels_tag_then_uses_recorded_release_id(self):
+        files, release, state, fake_gh, existing = self.publication_api(fresh=True)
+        with patch('publish_release.tag_commit', side_effect=lambda *_: state['tag']), patch('publish_release.gh', side_effect=fake_gh), patch('publish_release.subprocess.run', side_effect=existing):
+            publish(self.root)
+        self.assertEqual(state['created'], 1)
+        self.assertTrue(release['immutable'])
+        self.assertEqual(set(state['uploaded']), set(files))
 
     def test_publication_rejects_conflicts_and_disabled_immutability(self):
-        self.final_fixture()
-        for release, enabled in [
-            ({"target_commitish": "b" * 40}, True),
-            ({"target_commitish": SHA, "assets": [{"name": "application.ipa", "digest": "sha256:wrong"}], "draft": True}, True),
-            ({"target_commitish": SHA}, False),
-        ]:
-            with patch("publish_release.tag_commit", return_value=release["target_commitish"]), patch("publish_release.subprocess.run", return_value=subprocess.CompletedProcess([], 0, json.dumps(release), "")), patch("publish_release.gh", return_value=json.dumps({"enabled": enabled})) as calls:
+        for mode in ('tag', 'digest', 'disabled', 'handoff', 'duplicate'):
+            # Each fixture has its own original signed manifest.
+            for path in self.root.iterdir(): path.unlink()
+            files, release, state, fake_gh, existing = self.publication_api()
+            if mode == 'tag': state['tag'] = 'b' * 40
+            if mode == 'digest': release['assets'] = [{'name': 'application.ipa', 'digest': 'sha256:wrong'}]
+            if mode == 'disabled': state['enabled'] = False
+            if mode == 'handoff': release['body'] = 'another signed operation'
+            if mode == 'duplicate': state['duplicates'] = True
+            with self.subTest(mode=mode), patch('publish_release.tag_commit', side_effect=lambda *_: state['tag']), patch('publish_release.gh', side_effect=fake_gh), patch('publish_release.subprocess.run', side_effect=existing):
                 with self.assertRaises(ValueError): publish(self.root)
-                self.assertTrue(all(call.args[0] == "api" for call in calls.call_args_list))
+                self.assertEqual(state['uploaded'], [])
+                self.assertEqual(state['created'], 0)
 
 
 if __name__ == "__main__": unittest.main()

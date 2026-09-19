@@ -228,7 +228,7 @@ jobs:
       actions: read
       id-token: write
       artifact-metadata: write
-    if: always() && needs.verify.result == 'success' && needs.processing.result == 'success'
+    if: always() && needs.verify.result == 'success' && needs.processing.result == 'success' && inputs.processed_artifact_id == ''
     steps:
       - name: Checkout data and source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -287,10 +287,32 @@ jobs:
       - *a2
       - *a3
       - name: Restore final from this run
+        if: needs.verify.outputs.already_published != 'true' && inputs.processed_artifact_id == ''
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" final release-assets/
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Authenticate processed candidate for publication
+        if: needs.verify.outputs.already_published != 'true' && inputs.processed_artifact_id != ''
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.artifact_id }}
+          CANDIDATE_SHA256: ${{ inputs.sha256 }}
+      - name: Restore original signed processed handoff
+        if: needs.verify.outputs.already_published != 'true' && inputs.processed_artifact_id != ''
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" processed --full
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROCESSED_ARTIFACT_ID: ${{ inputs.processed_artifact_id }}
+          PROCESSED_SHA256: ${{ inputs.processed_sha256 }}
+      - name: Authenticate existing immutable release
+        if: needs.verify.outputs.already_published == 'true'
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" release --mode observe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
       - name: Authenticate final handoff
+        if: needs.verify.outputs.already_published != 'true'
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/verify_release.py" release-assets --final
         env:
           GH_TOKEN: ${{ github.token }}
@@ -304,6 +326,7 @@ jobs:
           permission-administration: read
           repositories: ${{ github.event.repository.name }}
       - name: Publish complete immutable release
+        if: needs.verify.outputs.already_published != 'true'
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/publish_release.py"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -313,7 +336,12 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
     needs:
       - verify
+      - processing
       - finalize
     environment: release-publishing
-    if: always() && needs.verify.result == 'success' && needs.finalize.result == 'success' && inputs.publish &&
-      vars.RELEASE_DISTRIBUTION_ENABLED == 'true'
+    concurrency:
+      group: ios-release-publication-${{ github.repository }}
+      cancel-in-progress: false
+    if: always() && needs.verify.result == 'success' && inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true' &&
+      (needs.verify.outputs.already_published == 'true' || (needs.processing.result == 'success' &&
+      (needs.finalize.result == 'success' || inputs.processed_artifact_id != '')))
