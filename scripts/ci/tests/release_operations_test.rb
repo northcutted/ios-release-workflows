@@ -170,12 +170,16 @@ class BuildUploadRecoveryTest < Minitest::Test
     @puts+=1
     if @fail_part;@fail_part=false;raise IOError,'lost transfer response';end
   end
-  def read(path,_query={})
+  def read(path,query={})
     case path
     when '/v1/apps' then {'data'=>[{'id'=>'app'}]}
     when '/v1/apps/app/buildUploads' then {'data'=>[@upload].compact}
     when '/v1/builds' then {'data'=>[@build].compact, 'included'=>[{'id'=>'prerelease','type'=>'preReleaseVersions','attributes'=>{'version'=>'1.7.0','platform'=>'IOS'}}]}
-    when '/v1/buildUploads/upload' then {'data'=>@upload,'included'=>[@file].compact}
+    when '/v1/buildUploads/upload'
+      response=Marshal.load(Marshal.dump(@upload))
+      # Apple omits relationship linkage unless explicitly included.
+      response['relationships'].delete('build') unless query.fetch('include','').split(',').include?('build')
+      {'data'=>response,'included'=>[@file].compact}
     else raise "Unexpected GET #{path}"
     end
   end
