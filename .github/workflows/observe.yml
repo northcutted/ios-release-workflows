@@ -8,6 +8,16 @@ on:
       platform_revision:
         type: string
         required: true
+    secrets:
+      APP_STORE_CONNECT_API_KEY_ID:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      APP_STORE_CONNECT_API_KEY_CONTENT:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
 permissions:
   contents: read
 jobs:
