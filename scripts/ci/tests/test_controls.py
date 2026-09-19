@@ -3,12 +3,36 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('IOS_RELEASE_CONFIG',str(Path(__file__).resolve().parents[3]/'examples/picstrip.json'))
 from preflight import check_controls, verified_bypasses
 from capture_controls import capture
 
 class ControlTests(unittest.TestCase):
+    def test_private_app_redaction_requires_unchanged_baseline_count_and_effective_permission(self):
+        rule = {'id': 23700335, 'node_id': 'ruleset-node', 'name': 'Release tags',
+                'updated_at': '2026-09-19T14:10:54.323Z', 'current_user_can_bypass': 'always'}
+        actors = [{'actor_id': 3718913, 'actor_type': 'Integration', 'bypass_mode': 'always'}]
+        baseline = dict(rule, bypass_actors=actors,
+                        bypass_nodes=[{'id': 'owner-visible-private-integration', 'bypassMode': 'ALWAYS'}])
+        # Actual administration:read installation response from the live canary.
+        connection = {'totalCount': 1, 'pageInfo': {'hasNextPage': False}, 'nodes': [None]}
+        self.assertEqual(actors, verified_bypasses(rule, baseline, lambda _: connection))
+        for response in (dict(connection, nodes=[], totalCount=0), dict(connection, nodes=[None, None], totalCount=2),
+                         dict(connection, nodes=[{'id': 'different', 'bypassMode': 'ALWAYS'}]),
+                         dict(connection, pageInfo={'hasNextPage': True})):
+            with self.subTest(response=response), self.assertRaises(ValueError):
+                verified_bypasses(rule, baseline, lambda _: response)
+        for change in ({'current_user_can_bypass': 'never'}, {'current_user_can_bypass': None},
+                       {'updated_at': '2026-09-19T14:10:54.324Z'}, {'id': 999}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                verified_bypasses(dict(rule, **change), baseline, lambda _: connection)
+        for bad in (dict(baseline, bypass_nodes=[]), dict(baseline, bypass_actors=[]),
+                    dict(baseline, bypass_actors=[dict(actors[0], actor_type='RepositoryRole')])):
+            with self.subTest(baseline=bad), self.assertRaises(ValueError):
+                verified_bypasses(rule, bad, lambda _: connection)
+
     def test_ruleset_timestamp_compares_instants_without_losing_precision(self):
         rule = {'id': 1, 'node_id': 'node', 'name': 'Main', 'updated_at': '2026-09-19T14:10:53.839Z'}
         baseline = dict(rule, updated_at='2026-09-19T09:10:53.839-05:00', bypass_actors=[], bypass_nodes=[])
@@ -83,4 +107,8 @@ class ControlTests(unittest.TestCase):
             with self.subTest(failure=failure):
                 if failure:
                     with self.assertRaises(ValueError):check_controls(read, controls={'publisher_app_id': 999} if failure=='publisher' else {})
-                else:check_controls(read)
+                else:
+                    check_controls(read)
+                    with patch.dict(os.environ, {'IOS_RELEASE_CONTROL_POLICY': '{"publisher_app_id":999}'}):
+                        with self.assertRaisesRegex(ValueError, 'Wrong publisher App'):
+                            check_controls(read)
