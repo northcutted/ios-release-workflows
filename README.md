@@ -52,6 +52,8 @@ The target is SLSA Build L3 for the GitHub-produced IPA, not Apple's redistribut
 
 Run `npm ci --ignore-scripts`, install the locked Ruby gems, then `npm run check:workflows` and `npm run test:ci`. The actionlint adapter validates `$/` targets before normalizing their spelling for actionlint 1.7.12, which predates that documented GitHub syntax. No source files are rewritten by linting.
 
+Accessibility synchronization preserves matching declarations and checks their readback. Draft updates contain feature booleans only; `deviceFamily` is creation-only. Changed published declarations require an explicitly prepared replacement draft.
+
 Staging reads back an already-matching encryption declaration without rewriting it; missing or changed declarations still require a successful configured update and readback.
 
 Screenshot processing waits at most two minutes per attempt. Locked Fastlane retries only incomplete images, keeps complete images with checksums, and fails after five attempts; the overall staging job is limited to 30 minutes.
