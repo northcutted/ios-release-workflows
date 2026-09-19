@@ -143,7 +143,11 @@ class ReleaseOperations < ReleaseGuard
     build = find_build
     raise "Wrong compliance build" unless build && build["id"] == @manifest.fetch("app_store_build_id")
     encryption = @config.fetch("targets").first.fetch("non_exempt_encryption")
-    mutate("PATCH", "/v1/builds/#{build.fetch('id')}", {"data" => {"type" => "builds", "id" => build.fetch("id"), "attributes" => {"usesNonExemptEncryption" => encryption}}})
+    # Apple can reject even an identical PATCH once the archive supplied this
+    # declaration. Preserve matching facts and always verify the live readback.
+    unless build.dig("attributes", "usesNonExemptEncryption") == encryption
+      mutate("PATCH", "/v1/builds/#{build.fetch('id')}", {"data" => {"type" => "builds", "id" => build.fetch("id"), "attributes" => {"usesNonExemptEncryption" => encryption}}})
+    end
     raise "Encryption declaration readback mismatch" unless find_build.dig("attributes", "usesNonExemptEncryption") == encryption
     ratings = @config.fetch("app_store").fetch("age_rating")
     return if ratings.empty?

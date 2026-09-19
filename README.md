@@ -52,6 +52,10 @@ The target is SLSA Build L3 for the GitHub-produced IPA, not Apple's redistribut
 
 Run `npm ci --ignore-scripts`, install the locked Ruby gems, then `npm run check:workflows` and `npm run test:ci`. The actionlint adapter validates `$/` targets before normalizing their spelling for actionlint 1.7.12, which predates that documented GitHub syntax. No source files are rewritten by linting.
 
+Staging reads back an already-matching encryption declaration without rewriting it; missing or changed declarations still require a successful configured update and readback.
+
+Screenshot processing waits at most two minutes per attempt. Locked Fastlane retries only incomplete images, keeps complete images with checksums, and fails after five attempts; the overall staging job is limited to 30 minutes.
+
 After a successful canary, pass its exact `final-RUN-ATTEMPT` artifact ID and SHA256 as `processed_artifact_id` and `processed_sha256`. Promotion reads back the recorded Apple build and publishes the original signed handoff byte for byte. It does not upload or re-sign it. Interrupted publication resumes the recorded draft only when its handoff marker and every existing asset digest match; release lookup includes drafts, and all readbacks use the numeric release ID. Existing immutable releases can create a corrected protected deployment ref without changing the release or app tag.
 
 Before enabling distribution: run complete native iOS QA, a signed candidate rehearsal, a TestFlight canary and draft inspection. Compare five equivalent runs before enabling two XCTest workers; require reliability and at least 15% median improvement. Local fixture tests do not substitute for a customer-owned external-repository or App Store rehearsal.
