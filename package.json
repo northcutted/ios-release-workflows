@@ -4,14 +4,19 @@
   "private": true,
   "description": "Reusable native iOS release workflows",
   "devDependencies": {
-    "@semantic-release/commit-analyzer": "12.0.0",
-    "@semantic-release/release-notes-generator": "13.0.0",
-    "conventional-changelog-conventionalcommits": "7.0.2",
-    "semver": "7.7.4",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "conventional-changelog-conventionalcommits": "10.4.0",
+    "semver": "7.8.5",
     "yaml": "2.9.1"
   },
   "scripts": {
     "check:workflows": "node scripts/ci/workflow_policy.mjs && node scripts/ci/lint_workflows.mjs",
     "test:ci": "node --test scripts/ci/tests/*.test.mjs && python3 -m unittest discover -s scripts/ci/tests -p \"test_*.py\" && bundle exec ruby scripts/ci/tests/release_guard_test.rb && bundle exec ruby scripts/ci/tests/release_operations_test.rb && bundle exec ruby scripts/ci/tests/fastlane_contract_test.rb"
+  },
+  "overrides": {
+    "@semantic-release/release-notes-generator": {
+      "conventional-changelog-writer": "9.2.1"
+    }
   }
 }

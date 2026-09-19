@@ -49,3 +49,11 @@ The target is SLSA Build L3 for the GitHub-produced IPA, not Apple's redistribut
 Run `npm ci --ignore-scripts`, install the locked Ruby gems, then `npm run check:workflows` and `npm run test:ci`. The actionlint adapter validates `$/` targets before normalizing their spelling for actionlint 1.7.12, which predates that documented GitHub syntax. No source files are rewritten by linting.
 
 Before enabling distribution: run complete native iOS QA, a signed candidate rehearsal, a TestFlight canary and draft inspection. Compare five equivalent runs before enabling two XCTest workers; require reliability and at least 15% median improvement. Local fixture tests do not substitute for a customer-owned external-repository or App Store rehearsal.
+
+## Dependency compatibility
+
+Dependabot groups release-analysis packages because parser and preset major versions must remain compatible. Regression tests cover version rules and rendered release notes.
+
+The notes generator 14.1.1 requests writer 8, while the Conventional Commits 10.4.0 preset requires writer 9. A scoped npm override pins `conventional-changelog-writer` to 9.2.1, whose `writeChangelogString` export is compatible with the generator. Remove this override when the generator supports writer 9, with the regression suite passing. See the [preset release notes](https://github.com/conventional-changelog/conventional-changelog/releases/tag/conventional-changelog-conventionalcommits-v10.4.0).
+
+Minitest 6 extracted mocks into [minitest-mock](https://github.com/minitest/minitest-mock); contract tests declare and require that dependency explicitly. Ruby dependencies remain locked with checksums.

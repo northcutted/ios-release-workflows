@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
         with:
           config: ${{ inputs.config }}
           revision: ${{ inputs.platform_revision }}
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
       - name: Install locked analysis tools
@@ -75,7 +75,7 @@ jobs:
     needs: version
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -112,7 +112,7 @@ jobs:
     needs: version
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -205,7 +205,7 @@ jobs:
       - build
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -255,7 +255,7 @@ jobs:
       - sbom
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -290,7 +290,7 @@ jobs:
           RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
       - name: Attest IPA and build manifest
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: |-
             release-assets/application.ipa
@@ -301,7 +301,7 @@ jobs:
         env:
           BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
       - name: Attest runtime SBOM
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: release-assets/application.ipa
           sbom-path: release-assets/ipa.spdx.json
@@ -355,7 +355,7 @@ jobs:
       - evidence
     steps:
       - name: Checkout data and source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 1
