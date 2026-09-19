@@ -139,7 +139,7 @@ class BuildUpload < ReleaseOperations
         transferred_here = @receipt["status"] == "transferred" && @receipt["adapter"] == "transporter"
         raise "Upload digest cannot be authenticated" unless digest_matches?(file) || transferred_here
         raise "Missing Apple upload file identity" unless file && file["id"]
-        build_id = get("/v1/buildUploads/#{upload.fetch('id')}").dig("data", "relationships", "build", "data", "id")
+        build_id = get("/v1/buildUploads/#{upload.fetch('id')}", "include" => "build").dig("data", "relationships", "build", "data", "id")
         build = find_build
         if build && build["id"] == build_id && build.dig("attributes", "processingState") == "VALID"
           checkpoint("upload_id" => upload.fetch("id"), "upload_file_id" => file.fetch("id"), "app_store_build_id" => build_id, "status" => "processed")
