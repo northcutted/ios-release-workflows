@@ -89,6 +89,15 @@ platform :ios do
     ReleaseOperations.new(release_manifest.merge(status), config: CONFIG, receipt_path: "#{BUILD}/groups.json").testflight_groups!
   end
 
+  lane :resume_processed do
+    manifest = release_manifest
+    status = JSON.parse(File.read(File.join(ASSETS, "testflight-status.json")))
+    guard = ReleaseGuard.new(manifest.merge(status), config: CONFIG)
+    build = guard.find_build
+    raise "Previously processed build changed or is no longer valid" unless build && build["id"] == status.fetch("app_store_build_id") && build.dig("attributes", "processingState") == "VALID"
+    ReleaseGuard.save(ENV.fetch("PROCESSING_RECEIPT"), status)
+  end
+
   lane :stage do
     manifest = release_manifest
     guard = ReleaseOperations.new(manifest, config: CONFIG)

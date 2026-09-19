@@ -73,7 +73,6 @@ class ReleaseOperations < ReleaseGuard
       checkpoint("status" => "submitted", "readback" => snapshot)
       return
     end
-    apply_release_policy!
     submissions = list("/v1/apps/#{app_id}/reviewSubmissions", "filter[platform]" => "IOS")
     active = submissions.reject { |s| %w[COMPLETE CANCELED].include?(s.dig("attributes", "state")) }
     raise "Ambiguous or foreign review submission" if active.length > 1
@@ -87,11 +86,20 @@ class ReleaseOperations < ReleaseGuard
     checkpoint("review_submission_id" => submission.fetch("id"), "status" => "preparing")
     items = list("/v1/reviewSubmissions/#{submission.fetch('id')}/items", "include" => "appStoreVersion")
     raise "Submission contains unrelated review items" unless items.all? { |i| i.dig("relationships", "appStoreVersion", "data", "id") == v["id"] } && items.length <= 1
+    apply_release_policy!
     if items.empty?
       item = mutate("POST", "/v1/reviewSubmissionItems", {"data" => {"type" => "reviewSubmissionItems", "relationships" => {"reviewSubmission" => {"data" => {"type" => "reviewSubmissions", "id" => submission.fetch("id")}}, "appStoreVersion" => {"data" => {"type" => "appStoreVersions", "id" => v.fetch("id")}}}}}).fetch("data")
       checkpoint("review_item_id" => item.fetch("id"))
     else
       checkpoint("review_item_id" => items.first.fetch("id"))
+    end
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      submission = get("/v1/reviewSubmissions/#{submission.fetch('id')}").fetch("data")
+      state = submission.dig("attributes", "state")
+      break if %w[READY_FOR_REVIEW WAITING_FOR_REVIEW IN_REVIEW].include?(state)
+      raise "Apple review submission is not ready; resume with recorded IDs" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      sleep(interval)
     end
     verify_selected_build!
     mutate("PATCH", "/v1/reviewSubmissions/#{submission.fetch('id')}", {"data" => {"type" => "reviewSubmissions", "id" => submission.fetch("id"), "attributes" => {"submitted" => true}}}) unless %w[WAITING_FOR_REVIEW IN_REVIEW].include?(submission.dig("attributes", "state"))
@@ -109,11 +117,25 @@ class ReleaseOperations < ReleaseGuard
   end
 
   def testflight_groups!
+    build_id = @manifest.fetch("app_store_build_id")
     @config.fetch("app_store").fetch("testflight_groups").each do |id|
       raise "Invalid beta group ID" unless id.match?(/\A[A-Za-z0-9-]+\z/)
+      group = get("/v1/betaGroups/#{id}", "include" => "app").fetch("data")
+      raise "Beta group belongs to another app" unless group.dig("relationships", "app", "data", "id") == app_id
+      unless group.dig("attributes", "isInternalGroup")
+        review = optional_get("/v1/builds/#{build_id}/betaAppReviewSubmission")["data"]
+        unless review
+          review = mutate("POST", "/v1/betaAppReviewSubmissions", {"data" => {"type" => "betaAppReviewSubmissions", "relationships" => {"build" => {"data" => {"type" => "builds", "id" => build_id}}}}}).fetch("data")
+        end
+        checkpoint("beta_review_submission_id" => review.fetch("id"))
+        state = review.dig("attributes", "betaReviewState")
+        raise "External TestFlight review rejected; owner action required" if state == "REJECTED"
+      end
       builds = list("/v1/betaGroups/#{id}/builds", "filter[version]" => @manifest.fetch("build_number"))
-      next if builds.any? { |b| b["id"] == @manifest.fetch("app_store_build_id") }
-      mutate("POST", "/v1/betaGroups/#{id}/relationships/builds", {"data" => [{"type" => "builds", "id" => @manifest.fetch("app_store_build_id")}]})
+      unless builds.any? { |b| b["id"] == build_id }
+        mutate("POST", "/v1/betaGroups/#{id}/relationships/builds", {"data" => [{"type" => "builds", "id" => build_id}]})
+      end
+      raise "TestFlight group assignment readback failed" unless list("/v1/betaGroups/#{id}/builds", "filter[version]" => @manifest.fetch("build_number")).any? { |b| b["id"] == build_id }
     end
   end
 

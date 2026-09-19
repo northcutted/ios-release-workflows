@@ -20,6 +20,12 @@ on:
       publish:
         type: boolean
         default: false
+      processed_artifact_id:
+        type: string
+        default: ""
+      processed_sha256:
+        type: string
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -54,6 +60,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_ARTIFACT_ID: ${{ inputs.artifact_id }}
           CANDIDATE_SHA256: ${{ inputs.sha256 }}
+      - &a5
+        name: Authenticate optional processed handoff
+        if: inputs.processed_artifact_id != ''
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" processed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROCESSED_ARTIFACT_ID: ${{ inputs.processed_artifact_id }}
+          PROCESSED_SHA256: ${{ inputs.processed_sha256 }}
       - name: Mint read-only control inspection token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         id: controls
@@ -91,7 +105,7 @@ jobs:
       - *a2
       - *a3
       - *a4
-      - &a5
+      - &a6
         name: Install locked platform gems
         uses: $/actions/ruby
       - name: Require explicit configured adapter
@@ -129,10 +143,10 @@ jobs:
         if: always()
     needs: verify
     environment: testflight
-    concurrency: &a6
+    concurrency: &a7
       group: ios-app-store-${{ github.repository }}
       cancel-in-progress: false
-    if: needs.verify.outputs.already_published != 'true'
+    if: needs.verify.outputs.already_published != 'true' && inputs.processed_artifact_id == ''
   processing:
     runs-on: ubuntu-24.04
     timeout-minutes: 70
@@ -147,11 +161,13 @@ jobs:
       - *a2
       - *a3
       - *a4
+      - *a5
       - name: Restore upload-operation from this run
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" upload-operation build/
         env:
           GH_TOKEN: ${{ github.token }}
-      - *a5
+        if: inputs.processed_artifact_id == ''
+      - *a6
       - name: Wait for exact Apple upload and build
         run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" processing
         env:
@@ -161,6 +177,17 @@ jobs:
           RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-build-manifest.json
           OPERATION_RECEIPT: ${{ github.workspace }}/build/upload-operation.json
           PROCESSING_RECEIPT: ${{ github.workspace }}/build/testflight-status.json
+        if: inputs.processed_artifact_id == ''
+      - name: Read back previously processed build
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" resume_processed
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-build-manifest.json
+          OPERATION_RECEIPT: ${{ github.workspace }}/build/upload-operation.json
+          PROCESSING_RECEIPT: ${{ github.workspace }}/build/testflight-status.json
+        if: inputs.processed_artifact_id != ''
       - name: Retain processed-${{ github.run_id }}-${{ github.run_attempt }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -173,7 +200,9 @@ jobs:
       - verify
       - upload
     environment: testflight
-    concurrency: *a6
+    concurrency: *a7
+    if: always() && needs.verify.result == 'success' && needs.verify.outputs.already_published != 'true' &&
+      (needs.upload.result == 'success' || (needs.upload.result == 'skipped' && inputs.processed_artifact_id != ''))
   finalize:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -183,6 +212,7 @@ jobs:
       actions: read
       id-token: write
       artifact-metadata: write
+    if: always() && needs.verify.result == 'success' && needs.processing.result == 'success'
     steps:
       - name: Checkout data and source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -218,10 +248,15 @@ jobs:
           retention-days: 90
           compression-level: 0
           if-no-files-found: error
+        id: processed
+      - name: Record processed handoff for a later promotion
+        run: 'printf "Processed artifact: %s\nSHA256: %s\n" "$ARTIFACT_ID" "$ARTIFACT_SHA" >> "$GITHUB_STEP_SUMMARY"'
+        env:
+          ARTIFACT_ID: ${{ steps.processed.outputs.artifact-id }}
+          ARTIFACT_SHA: ${{ steps.processed.outputs.artifact-digest }}
     needs:
       - verify
       - processing
-    if: inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true'
   publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -260,3 +295,4 @@ jobs:
       - verify
       - finalize
     environment: release-publishing
+    if: always() && needs.verify.result == 'success' && needs.finalize.result == 'success' && inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true'

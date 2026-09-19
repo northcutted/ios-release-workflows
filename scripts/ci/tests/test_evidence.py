@@ -16,6 +16,7 @@ os.environ.setdefault("IOS_RELEASE_CONFIG", str(Path(__file__).resolve().parents
 os.environ.setdefault("IOS_RELEASE_REVISION", "f" * 40)
 os.environ.setdefault("GITHUB_SHA", "a" * 40)
 os.environ.setdefault("GITHUB_RUN_ID", "901")
+os.environ.setdefault("GITHUB_RUN_ATTEMPT", "1")
 import evidence as e
 from verify_release import provenance_identity
 from verify_release import verify

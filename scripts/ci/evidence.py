@@ -242,7 +242,7 @@ def finalize(root):
     validate_status(status, data)
     data.update(app_store_build_id=status["app_store_build_id"], processing_state="VALID",
                 upload_id=status.get("upload_id"), upload_file_id=status.get("upload_file_id"),
-                promotion={"source_sha": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "workflow": ".github/workflows/promote.yml", "revision": os.environ["IOS_RELEASE_REVISION"]})
+                promotion={"source_sha": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"], "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "workflow": ".github/workflows/promote.yml", "revision": os.environ["IOS_RELEASE_REVISION"]})
     data["artifacts"] = [asset(p) for p in sorted(root.iterdir()) if p.is_file() and p.name not in ("release-manifest.json", "release-attestation.jsonl")]
     write(root / "release-manifest.json", data)
     validate_manifest(root, "release-manifest.json", final=True)

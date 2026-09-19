@@ -22,7 +22,7 @@ Each Apple app must have one owning release repository: GitHub concurrency locks
 | --- | --- | --- |
 | `ci.yml` | exact `source`, unique `prefix`, `test_workers` (default 1) | secret-free QA and always-reporting gate |
 | `prepare.yml` | none; caller must run on main | candidate artifact ID and SHA256; no upload |
-| `promote.yml` | exact `artifact_id`, `sha256`, explicit `upload_adapter`, `publish` (default false) | verified TestFlight build; optionally immutable release |
+| `promote.yml` | exact `artifact_id`, `sha256`, explicit `upload_adapter`, `publish` (default false), optional `processed_artifact_id` and `processed_sha256` | verified TestFlight build; optionally immutable release |
 | `deploy.yml` | `release_tag`, optional exact `metadata_commit`, `submit` | staged build, production approval, confirmed submission and signed receipts |
 | `observe.yml` | none | read-only status for recent immutable releases |
 
@@ -36,7 +36,7 @@ Preparation produces schema-v3 evidence binding source, platform revision, app/t
 
 `TESTFLIGHT_CANARY_ENABLED=true` allows manual TestFlight rehearsal without publication. `RELEASE_DISTRIBUTION_ENABLED=true` additionally permits publication/staging/submission. `publish: false` remains the promotion default. The default upload adapter is Transporter until a consumer validates the Build Uploads adapter in a real canary. Set the adapter in the candidate configuration and promotion input consistently; no automatic fallback exists.
 
-The Build Uploads adapter reserves an Apple upload/file, transfers bounded byte ranges, commits SHA256, and binds Apple's processed build through the upload relationship. Failed attempts retain operation receipts. Rerun failed jobs in the **same promotion run** to recover prior successful transfer receipts. Existing uploads are reused only with a matching SHA256 or that run's verified successful Transporter receipt. An ambiguous legacy upload without proof is rejected. Conflicting immutable releases are never replaced.
+The Build Uploads adapter reserves an Apple upload/file, transfers bounded byte ranges, commits SHA256, and binds Apple's processed build through the upload relationship. Failed attempts retain operation receipts. Rerun failed jobs in the **same promotion run** to recover prior successful transfer receipts. Existing uploads are reused only with a matching SHA256 or that run's verified successful Transporter receipt. Every successful canary also emits a signed final handoff artifact. To publish it later, supply the original candidate ID/digest plus that exact processed artifact ID/digest; the platform authenticates both, reads back the recorded Apple build, and performs no transfer. An ambiguous legacy upload without proof is rejected. Conflicting immutable releases are never replaced.
 
 Staging explicitly attaches the processed build and rejects replacement of an already selected different build. Production approval precedes an explicit release-policy update and readback. Submission preserves permitted metadata edits, resumes only matching review items, and records success only after Apple's submitted state is visible. Receipts are separately attested workflow artifacts with 90-day retention; they do not mutate immutable releases and omit review credentials/contact details.
 

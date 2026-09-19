@@ -29,17 +29,9 @@ def outputs(manifest):
     return values
 
 
-def candidate(artifact_id, expected_digest):
-    require(re.fullmatch(r'[1-9]\d*', artifact_id), 'An explicit artifact ID is required')
-    require(re.fullmatch(r'[a-f0-9]{64}', expected_digest), 'An explicit artifact SHA256 is required')
+def extract_artifact(artifact_id, expected_digest, root):
     prefix = f"repos/{CONFIG['repository']}"
-    artifact = api(f'{prefix}/actions/artifacts/{artifact_id}')
-    require(not artifact['expired'] and artifact['digest'] == 'sha256:' + expected_digest, 'Candidate expired or digest changed')
-    run = api(f"{prefix}/actions/runs/{artifact['workflow_run']['id']}")
-    require(run['conclusion'] == 'success' and run['head_branch'] == 'main' and run['path'] == CONFIG['source_workflow'], 'Candidate was not prepared successfully on protected main')
-    comparison = api(f"{prefix}/compare/{run['head_sha']}...main")
-    require(comparison['status'] in ('ahead', 'identical'), 'Candidate is not an ancestor of protected main')
-    root = Path('release-assets'); root.mkdir(exist_ok=True)
+    root = Path(root); root.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory() as temp:
         archive = Path(temp) / 'candidate.zip'
         with archive.open('wb') as output:
@@ -53,6 +45,20 @@ def candidate(artifact_id, expected_digest):
                 require((item.external_attr >> 16) & 0o170000 != 0o120000, 'Candidate symlink')
                 names.add(item.filename)
             zipped.extractall(root)
+
+
+def candidate(artifact_id, expected_digest):
+    require(re.fullmatch(r'[1-9]\d*', artifact_id), 'An explicit artifact ID is required')
+    require(re.fullmatch(r'[a-f0-9]{64}', expected_digest), 'An explicit artifact SHA256 is required')
+    prefix = f"repos/{CONFIG['repository']}"
+    artifact = api(f'{prefix}/actions/artifacts/{artifact_id}')
+    require(not artifact['expired'] and artifact['digest'] == 'sha256:' + expected_digest, 'Candidate expired or digest changed')
+    run = api(f"{prefix}/actions/runs/{artifact['workflow_run']['id']}")
+    require(run['conclusion'] == 'success' and run['head_branch'] == 'main' and run['path'] == CONFIG['source_workflow'], 'Candidate was not prepared successfully on protected main')
+    comparison = api(f"{prefix}/compare/{run['head_sha']}...main")
+    require(comparison['status'] in ('ahead', 'identical'), 'Candidate is not an ancestor of protected main')
+    root = Path('release-assets')
+    extract_artifact(artifact_id, expected_digest, root)
     manifest = verify(root, source=run['head_sha'])
     require(str(manifest['run_id']) == str(run['id']), 'Candidate belongs to another run')
     require(artifact['name'] == f"candidate-{manifest['run_id']}-{manifest['run_attempt']}", 'Wrong candidate artifact')
@@ -74,6 +80,26 @@ def candidate(artifact_id, expected_digest):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
             out.write(f"already_published={str(published).lower()}\n")
     return outputs(manifest)
+
+
+def processed(artifact_id, expected_digest):
+    """An explicit, signed canary handoff can be promoted without another transfer."""
+    require(re.fullmatch(r'[1-9]\d*', artifact_id), 'An explicit processed artifact ID is required')
+    require(re.fullmatch(r'[a-f0-9]{64}', expected_digest), 'An explicit processed SHA256 is required')
+    candidate_manifest = verify('release-assets')
+    artifact = api(f"repos/{CONFIG['repository']}/actions/artifacts/{artifact_id}")
+    require(not artifact['expired'] and artifact['digest'] == 'sha256:' + expected_digest, 'Processed artifact expired or changed')
+    with tempfile.TemporaryDirectory() as temp:
+        extract_artifact(artifact_id, expected_digest, temp)
+        manifest = verify(temp, source=candidate_manifest['source_sha'], final=True)
+        require(manifest['candidate_id'] == candidate_manifest['candidate_id'], 'Processed handoff belongs to another candidate')
+        promotion = manifest['promotion']
+        require(str(artifact['workflow_run']['id']) == str(promotion['run_id']), 'Wrong promotion run')
+        require(artifact['name'] == f"final-{promotion['run_id']}-{promotion['run_attempt']}", 'Wrong processed artifact')
+        # Only the signed processing receipt is needed; never execute artifact code.
+        import shutil
+        shutil.copyfile(Path(temp) / 'testflight-status.json', 'release-assets/testflight-status.json')
+    print('Authenticated processed candidate; no new upload required')
 
 
 def release(tag, mode="deploy", emit=True):
@@ -100,9 +126,11 @@ def release(tag, mode="deploy", emit=True):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('kind', choices=['candidate', 'release'])
+    parser.add_argument('kind', choices=['candidate', 'processed', 'release'])
     args = parser.parse_args()
     if args.kind == 'candidate':
         candidate(os.environ['CANDIDATE_ARTIFACT_ID'], os.environ['CANDIDATE_SHA256'])
+    elif args.kind == 'processed':
+        processed(os.environ['PROCESSED_ARTIFACT_ID'], os.environ['PROCESSED_SHA256'])
     else:
         release(os.environ['RELEASE_TAG'])

@@ -24,6 +24,7 @@ class ReleaseOperationsTest < Minitest::Test
     when '/v1/appStoreVersions/version/build' then {'data'=>@selected}
     when '/v1/appStoreVersions/version/appStoreVersionPhasedRelease' then {'data'=>@phased}
     when '/v1/apps/app/reviewSubmissions' then {'data'=>[@submission].compact}
+    when '/v1/reviewSubmissions/submission' then {'data'=>@submission}
     when '/v1/reviewSubmissions/submission/items' then {'data'=>@items}
     when '/v1/appStoreVersions/version/appStoreVersionLocalizations','/v1/apps/app/appInfos' then {'data'=>[]}
     else raise "Unexpected GET #{path}"
@@ -89,6 +90,19 @@ class ReleaseOperationsTest < Minitest::Test
     production{assert_raises(RuntimeError){@guard.submit!(timeout:0,interval:0)}}
     assert_equal 'PREPARE_FOR_SUBMISSION',@state
     assert_equal 'foreign',@items.first['id']
+    assert_empty @writes
+  end
+  def test_not_ready_submission_is_not_sent_and_can_resume
+    @selected=build
+    @submission={'id'=>'submission','attributes'=>{'state'=>'UNRESOLVED_ISSUES'}}
+    @items=[{'id'=>'item','relationships'=>{'appStoreVersion'=>{'data'=>{'id'=>'version'}}}}]
+    production do
+      assert_raises(RuntimeError){@guard.submit!(timeout:0,interval:0)}
+      refute @writes.any?{|write|write[1]=='/v1/reviewSubmissions/submission'}
+      @submission['attributes']['state']='READY_FOR_REVIEW'
+      @guard.submit!(timeout:0,interval:0)
+    end
+    assert_equal 1,@items.length
   end
   def test_submitted_retry_is_read_only
     @selected=build; @state='WAITING_FOR_REVIEW'
@@ -98,6 +112,33 @@ class ReleaseOperationsTest < Minitest::Test
   def test_receipt_cannot_be_reused_for_another_candidate
     @guard.checkpoint('status'=>'ready')
     assert_raises(RuntimeError){ReleaseOperations.new(@manifest.merge('ipa_sha256'=>'f'*64),config:@config,receipt_path:File.join(@directory,'receipt.json'))}
+  end
+  def test_testflight_group_assignment_is_checked_and_idempotent
+    @config['app_store']['testflight_groups']=['group']
+    assigned=[];writes=[]
+    reader=lambda do |path,query={}|
+      case path
+      when '/v1/betaGroups/group' then {'data'=>{'relationships'=>{'app'=>{'data'=>{'id'=>'app'}}},'attributes'=>{'isInternalGroup'=>true}}}
+      when '/v1/betaGroups/group/builds' then {'data'=>assigned}
+      else read(path,query)
+      end
+    end
+    writer=lambda do |method,path,payload|
+      writes<<[method,path];assigned.replace(payload['data']);{}
+    end
+    guard=ReleaseOperations.new(@manifest,config:@config,client:reader,writer:writer,receipt_path:File.join(@directory,'groups.json'))
+    2.times{guard.testflight_groups!}
+    assert_equal 1,writes.length
+    assert_equal 'verified',assigned.first['id']
+  end
+  def test_foreign_testflight_group_stops_before_write
+    @config['app_store']['testflight_groups']=['group']
+    reader=lambda do |path,query={}|
+      path=='/v1/betaGroups/group' ? {'data'=>{'relationships'=>{'app'=>{'data'=>{'id'=>'foreign'}}}}} : read(path,query)
+    end
+    guard=ReleaseOperations.new(@manifest,config:@config,client:reader,writer:method(:write),receipt_path:File.join(@directory,'groups.json'))
+    assert_raises(RuntimeError){guard.testflight_groups!}
+    assert_empty @writes
   end
   def test_range_io_does_not_send_bytes_from_next_upload_part
     require 'stringio'
