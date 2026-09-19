@@ -174,7 +174,7 @@ class BuildUploadRecoveryTest < Minitest::Test
     case path
     when '/v1/apps' then {'data'=>[{'id'=>'app'}]}
     when '/v1/apps/app/buildUploads' then {'data'=>[@upload].compact}
-    when '/v1/builds' then {'data'=>[]}
+    when '/v1/builds' then {'data'=>[@build].compact, 'included'=>[{'id'=>'prerelease','type'=>'preReleaseVersions','attributes'=>{'version'=>'1.7.0','platform'=>'IOS'}}]}
     when '/v1/buildUploads/upload' then {'data'=>@upload,'included'=>[@file].compact}
     else raise "Unexpected GET #{path}"
     end
@@ -183,7 +183,7 @@ class BuildUploadRecoveryTest < Minitest::Test
     case path
     when '/v1/buildUploads'
       @posts<<path
-      @upload={'id'=>'upload','attributes'=>payload['data']['attributes'].merge('state'=>'AWAITING_UPLOAD'),'relationships'=>{}}
+      @upload={'id'=>'upload','attributes'=>payload['data']['attributes'].merge('state'=>{'state'=>'AWAITING_UPLOAD','errors'=>[],'warnings'=>[],'infos'=>[]}),'relationships'=>{}}
       {'data'=>@upload}
     when '/v1/buildUploadFiles'
       @posts<<path
@@ -218,6 +218,37 @@ class BuildUploadRecoveryTest < Minitest::Test
     @file['attributes']['sourceFileChecksums']['file']['hash']='f'*64
     assert_raises(RuntimeError){controller.upload!(@ipa)}
     assert_equal 1,@puts
+  end
+  def complete_upload
+    @uploader.upload!(@ipa)
+    @upload['attributes']['state']['state']='COMPLETE'
+    @upload['relationships']['build']={'data'=>{'id'=>'verified'}}
+    @build={'id'=>'verified','attributes'=>{'version'=>'100.1','processingState'=>'VALID'},'relationships'=>{'app'=>{'data'=>{'id'=>'app'}},'preReleaseVersion'=>{'data'=>{'id'=>'prerelease'}}}}
+  end
+  def test_nested_apple_completion_returns_exact_build_and_upload_ids
+    complete_upload
+    status=controller.wait_for_verified_processing!(timeout:0,interval:0)
+    assert_equal 'VALID',status['processing_state']
+    assert_equal 'verified',status['app_store_build_id']
+    assert_equal 'upload',status['upload_id']
+    assert_equal 'file',status['upload_file_id']
+  end
+  def test_nested_apple_failure_stops_immediately
+    complete_upload
+    @upload['attributes']['state']['state']='FAILED'
+    assert_match(/Apple rejected upload/,assert_raises(RuntimeError){controller.wait_for_verified_processing!(timeout:0,interval:0)}.message)
+  end
+  def test_completed_upload_cannot_substitute_a_build
+    complete_upload
+    @build['id']='foreign'
+    assert_match(/conflicts with upload/,assert_raises(RuntimeError){controller.wait_for_verified_processing!(timeout:0,interval:0)}.message)
+  end
+  def test_transporter_receipt_requires_upload_file_identity
+    complete_upload
+    @config['upload_adapter']='transporter'
+    controller.checkpoint('adapter'=>'transporter','status'=>'transferred')
+    @file=nil
+    assert_match(/Missing Apple upload file identity/,assert_raises(RuntimeError){controller.reconcile_accepted!}.message)
   end
   def test_tampered_local_ipa_stops_before_any_apple_write
     File.binwrite(@ipa,'substituted')

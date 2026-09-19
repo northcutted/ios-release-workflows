@@ -6,6 +6,13 @@ class BuildUpload < ReleaseOperations
          "filter[cfBundleVersion]" => @manifest.fetch("build_number"), "filter[platform]" => "IOS")
   end
 
+  def upload_state(upload)
+    value = upload.dig("attributes", "state")
+    state = value.is_a?(Hash) && value["state"]
+    raise "Missing Apple upload state" unless state.is_a?(String) && !state.empty?
+    state
+  end
+
   def exact_upload
     values = uploads
     raise "Ambiguous existing upload" unless values.length <= 1
@@ -13,7 +20,7 @@ class BuildUpload < ReleaseOperations
     if upload
       attrs = upload.fetch("attributes")
       raise "Wrong upload version/platform" unless attrs["cfBundleShortVersionString"] == @manifest["version"] && attrs["cfBundleVersion"] == @manifest["build_number"] && attrs["platform"] == "IOS"
-      raise "Apple rejected upload" if attrs["state"] == "FAILED"
+      raise "Apple rejected upload" if upload_state(upload) == "FAILED"
       raise "Upload ID changed" if @receipt["upload_id"] && @receipt["upload_id"] != upload["id"]
     end
     upload
@@ -42,6 +49,7 @@ class BuildUpload < ReleaseOperations
     return false unless upload
     file = asset_file(upload)
     raise "Cannot authenticate existing upload bytes; refusing duplicate transfer" unless digest_matches?(file) || (@receipt["status"] == "transferred" && @receipt["adapter"] == "transporter")
+    raise "Missing Apple upload file identity" unless file && file["id"]
     checkpoint("status" => "transferred", "upload_id" => upload.fetch("id"), "upload_file_id" => file.fetch("id"))
     true
   end
@@ -124,12 +132,13 @@ class BuildUpload < ReleaseOperations
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
     loop do
       upload = exact_upload
-      if upload && upload.dig("attributes", "state") == "COMPLETE"
+      if upload && upload_state(upload) == "COMPLETE"
         file = asset_file(upload)
         # Transporter can report MD5 only. Its successful transfer receipt is required;
         # an unrelated existing build is never adopted merely by matching version.
         transferred_here = @receipt["status"] == "transferred" && @receipt["adapter"] == "transporter"
         raise "Upload digest cannot be authenticated" unless digest_matches?(file) || transferred_here
+        raise "Missing Apple upload file identity" unless file && file["id"]
         build_id = get("/v1/buildUploads/#{upload.fetch('id')}").dig("data", "relationships", "build", "data", "id")
         build = find_build
         if build && build["id"] == build_id && build.dig("attributes", "processingState") == "VALID"
