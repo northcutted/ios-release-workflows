@@ -153,6 +153,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse((self.root / "release-manifest.json").exists())
 
     def test_failed_signature_stops_before_manifest_is_consumed(self):
+        self.final_fixture()
         with patch("verify_release.subprocess.run", side_effect=subprocess.CalledProcessError(1, "gh")), patch("verify_release.validate_manifest") as consume:
             with self.assertRaises(subprocess.CalledProcessError): verify(self.root, SHA, final=True)
             consume.assert_not_called()

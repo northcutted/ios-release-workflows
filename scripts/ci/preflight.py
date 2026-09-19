@@ -3,6 +3,7 @@ from fetch import api
 from configuration import CONFIG, require
 import json
 import subprocess
+from datetime import datetime
 
 
 def bypass_nodes(node_id):
@@ -24,8 +25,15 @@ def verified_bypasses(rule, baseline, graphql=bypass_nodes):
     if 'bypass_actors' in rule:
         return rule['bypass_actors']
     require(isinstance(baseline, dict), 'Hidden bypass actors require an owner-recorded controls baseline')
-    for key in ('id', 'node_id', 'updated_at'):
+    for key in ('id', 'node_id'):
         require(rule.get(key) and rule[key] == baseline.get(key), 'Ruleset changed since owner verification: ' + rule['name'])
+    def instant(value):
+        require(isinstance(value, str), 'Missing ruleset modification time')
+        result = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        require(result.tzinfo is not None, 'Ruleset modification time requires a timezone')
+        return result
+    require(instant(rule.get('updated_at')) == instant(baseline.get('updated_at')),
+            'Ruleset changed since owner verification: ' + rule['name'])
     connection = graphql(rule['node_id'])
     require(isinstance(connection, dict) and isinstance(connection.get('nodes'), list), 'Incomplete bypass readback')
     nodes = connection['nodes']
