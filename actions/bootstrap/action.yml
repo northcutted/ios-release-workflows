@@ -1,0 +1,17 @@
+name: Pinned iOS release tools
+description: Load platform tools independently of app source
+inputs:
+  config:
+    required: true
+    description: Consumer configuration path
+  revision:
+    required: true
+    description: Expected full platform commit
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/bootstrap.py"
+      env:
+        CONFIG_PATH: ${{ inputs.config }}
+        PLATFORM_REVISION: ${{ inputs.revision }}

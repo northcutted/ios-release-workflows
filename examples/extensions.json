@@ -1,0 +1,124 @@
+{
+  "repository": "customer-team/native-ios-example",
+  "xcode": {
+    "version": "27.0",
+    "build": "27A266a",
+    "path": "/Applications/Xcode_27.0.app/Contents/Developer",
+    "runtime": "27.0",
+    "sdk": "27.0"
+  },
+  "compatibility": {
+    "version": "26.6",
+    "build": "17F113",
+    "path": "/Applications/Xcode_26.6.app/Contents/Developer",
+    "runtime": "26.5",
+    "sdk": "26.5"
+  },
+  "test_device": "iPhone 17",
+  "screenshot_devices": [
+    "iPhone 18 Pro Max",
+    "iPad Pro 13-inch (M5)"
+  ],
+  "screenshot_classes": {
+    "iphone": {
+      "names": [
+        "iPhone 18 Pro Max",
+        "iPhone 17 Pro Max"
+      ],
+      "sizes": [
+        [
+          1320,
+          2868
+        ],
+        [
+          1260,
+          2736
+        ]
+      ]
+    },
+    "ipad": {
+      "names": [
+        "iPad Pro 13-inch (M5)"
+      ],
+      "sizes": [
+        [
+          2064,
+          2752
+        ]
+      ]
+    }
+  },
+  "screens": [
+    "01_Main"
+  ],
+  "locales": [
+    "en-US"
+  ],
+  "team_id": "ABCDE12345",
+  "schema_version": 1,
+  "default_branch": "main",
+  "project": "Application.xcodeproj",
+  "scheme": "Application",
+  "test_targets": [
+    "ApplicationTests"
+  ],
+  "metadata_path": "app-store/metadata",
+  "screenshots_path": "app-store/screenshots",
+  "accessibility_path": "",
+  "localization_catalog": "",
+  "source_workflow": ".github/workflows/main.yml",
+  "upload_adapter": "transporter",
+  "build_number_offset": 0,
+  "qa_checks": [
+    "lint",
+    "localization",
+    "analyze",
+    "test",
+    "test-compatibility"
+  ],
+  "runtime_dependencies": [
+    {
+      "name": "ExampleRuntime",
+      "version": "1.0.0",
+      "source": "https://github.com/example/runtime"
+    }
+  ],
+  "signing_repository": "git@github.com:customer-team/signing.git",
+  "targets": [
+    {
+      "bundle_id": "org.example.application",
+      "profile": "match AppStore org.example.application",
+      "non_exempt_encryption": false,
+      "tracking": false,
+      "entitlements": {}
+    },
+    {
+      "bundle_id": "org.example.application.Extension1",
+      "profile": "match AppStore org.example.application.Extension1",
+      "non_exempt_encryption": false,
+      "tracking": false,
+      "entitlements": {}
+    },
+    {
+      "bundle_id": "org.example.application.Extension2",
+      "profile": "match AppStore org.example.application.Extension2",
+      "non_exempt_encryption": false,
+      "tracking": false,
+      "entitlements": {}
+    }
+  ],
+  "app_store": {
+    "bundle_id": "org.example.application",
+    "release_type": "MANUAL",
+    "phased_release": false,
+    "primary_category": "PHOTO_AND_VIDEO",
+    "secondary_category": "UTILITIES",
+    "testflight_groups": [],
+    "age_rating": {},
+    "submission_information": {
+      "export_compliance_uses_encryption": false
+    }
+  },
+  "localization_catalogs": [],
+  "localization_locales": []
+}

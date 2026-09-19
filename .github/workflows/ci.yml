@@ -1,0 +1,224 @@
+name: iOS CI
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/ios-release.json
+      platform_revision:
+        type: string
+        required: true
+      source:
+        type: string
+        required: true
+      prefix:
+        type: string
+        required: true
+      test_workers:
+        type: string
+        default: "1"
+permissions: &a1
+  contents: read
+jobs:
+  lint:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.source }}
+      - &a2
+        name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - name: Install verified SwiftLint
+        run: bash "$IOS_RELEASE_ROOT/scripts/ci/install_swiftlint.sh"
+      - name: Strict SwiftLint
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/run_qa.py" lint swiftlint lint --strict --no-cache --config .swiftlint.yml
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+      - name: Audit configured string catalogs
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/run_qa.py" localization python3
+          "$IOS_RELEASE_ROOT/scripts/ci/localization.py"
+        if: always()
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+      - name: Retain qa-lint-${{ inputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qa-lint-${{ inputs.prefix }}
+          path: qa-results/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+  analyze:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.source }}
+      - *a2
+      - name: Require exact Xcode and simulator
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/toolchain.py"
+      - &a3
+        name: Install locked platform gems
+        uses: $/actions/ruby
+      - name: Run analyze
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/run_qa.py" analyze bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb"
+          analyze
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+          TEST_WORKERS: ${{ inputs.test_workers }}
+      - name: Retain qa-analyze-${{ inputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qa-analyze-${{ inputs.prefix }}
+          path: qa-results/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.source }}
+      - *a2
+      - name: Require exact Xcode and simulator
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/toolchain.py"
+      - *a3
+      - name: Run test
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/run_qa.py" test bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" test
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+          TEST_WORKERS: ${{ inputs.test_workers }}
+      - name: Retain qa-test-${{ inputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qa-test-${{ inputs.prefix }}
+          path: qa-results/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+  test-compatibility:
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.source }}
+      - *a2
+      - name: Require exact Xcode and simulator
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/toolchain.py" --compatibility
+      - *a3
+      - name: Run test-compatibility
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/run_qa.py" test-compatibility bundle exec ruby
+          "$IOS_RELEASE_ROOT/scripts/fastlane.rb" test
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+          TEST_WORKERS: ${{ inputs.test_workers }}
+      - name: Retain qa-test-compatibility-${{ inputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qa-test-compatibility-${{ inputs.prefix }}
+          path: qa-results/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ inputs.source }}
+      - *a2
+      - name: Download qa-lint-${{ inputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: qa-lint-${{ inputs.prefix }}
+          path: qa-results/
+      - name: Download qa-analyze-${{ inputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: qa-analyze-${{ inputs.prefix }}
+          path: qa-results/
+      - name: Download qa-test-${{ inputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: qa-test-${{ inputs.prefix }}
+          path: qa-results/
+      - name: Download qa-test-compatibility-${{ inputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: qa-test-compatibility-${{ inputs.prefix }}
+          path: qa-results/
+      - name: Validate all QA evidence
+        run: |-
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" qa qa-results --output build/qa --source "$SOURCE_SHA"
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" checksums build/qa --output build/qa/qa-checksums.json
+        env:
+          SOURCE_SHA: ${{ inputs.source }}
+      - name: Retain qa-evidence-${{ inputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qa-evidence-${{ inputs.prefix }}
+          path: build/qa/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    needs:
+      - lint
+      - analyze
+      - test
+      - test-compatibility
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Require every mandatory result
+        run: |-
+          python3 - <<'PY'
+          import json, os
+          results=json.loads(os.environ['RESULTS'])
+          assert all(result['result']=='success' for result in results.values()), results
+          PY
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+    name: CI Gate
+    needs:
+      - lint
+      - analyze
+      - test
+      - test-compatibility
+      - evidence
+    if: always()

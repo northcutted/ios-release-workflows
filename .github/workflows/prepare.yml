@@ -1,0 +1,414 @@
+name: Prepare verified candidate
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/ios-release.json
+      platform_revision:
+        type: string
+        required: true
+    outputs:
+      artifact_id:
+        description: Exact candidate artifact ID
+        value: ${{ jobs.verify.outputs.artifact_id }}
+      sha256:
+        description: Candidate archive SHA256
+        value: ${{ jobs.verify.outputs.sha256 }}
+permissions: &a2
+  contents: read
+jobs:
+  version:
+    name: Determine candidate without write credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - &a1
+        name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - name: Install locked analysis tools
+        run: npm ci --prefix "$IOS_RELEASE_ROOT" --ignore-scripts --no-audit --no-fund
+      - name: Analyze Conventional Commits
+        run: node "$IOS_RELEASE_ROOT/scripts/semantic_dry_run.mjs" build/version/semantic-release.json
+      - name: Record candidate identity
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/candidate_context.py"
+        id: context
+      - name: Retain version artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: version-${{ steps.context.outputs.prefix }}
+          path: build/version/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      version: ${{ steps.context.outputs.version }}
+      source_sha: ${{ steps.context.outputs.source_sha }}
+      build_number: ${{ steps.context.outputs.build_number }}
+      run_id: ${{ steps.context.outputs.run_id }}
+      run_attempt: ${{ steps.context.outputs.run_attempt }}
+      prefix: ${{ steps.context.outputs.prefix }}
+      candidate: ${{ steps.context.outputs.candidate }}
+  package:
+    name: Package source and App Store assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: version
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ needs.version.outputs.source_sha }}
+          lfs: true
+      - *a1
+      - name: Download version-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: version-${{ needs.version.outputs.prefix }}
+          path: build/version
+      - name: Package and validate release inputs
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/package.py"
+        env:
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+      - name: Upload package-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: package-${{ needs.version.outputs.prefix }}
+          path: build/package/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    if: needs.version.outputs.candidate == 'true'
+    permissions: *a2
+  build:
+    name: Build and sign IPA
+    runs-on: xcode-27
+    timeout-minutes: 30
+    needs: version
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ needs.version.outputs.source_sha }}
+      - *a1
+      - name: Validate exact toolchain
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/toolchain.py"
+      - name: Install locked platform gems
+        uses: $/actions/ruby
+      - name: Load read-only certificate repository key
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
+        with:
+          ssh-private-key: ${{ secrets.MATCH_SSH_PRIVATE_KEY }}
+      - name: Snapshot signing repository
+        run: bash "$IOS_RELEASE_ROOT/scripts/ci/signing_snapshot.sh"
+      - name: Import signing material
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" certificates
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      - name: Remove SSH identities before compilation
+        run: ssh-add -D
+      - name: Archive and export signed IPA
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" build
+        env:
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+          MARKETING_VERSION: ${{ needs.version.outputs.version }}
+      - name: Validate exported bundles and symbols
+        run: >-
+          mkdir -p build/release
+
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/validate_ipa.py"
+
+          cp build/application.ipa build/build-env.json build/release/
+
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" checksums build/release --output
+          build/release/build-checksums.json
+        env:
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+      - name: Upload build-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: build-${{ needs.version.outputs.prefix }}
+          path: build/release/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+      - name: Package archive diagnostics
+        run: >-
+          mkdir -p build/archive-diagnostics
+
+          if [ -d build/application.xcarchive ]; then tar -czf build/archive-diagnostics/application.xcarchive.tar.gz -C
+          build application.xcarchive; fi
+
+          if [ -d build/logs ]; then cp -R build/logs build/archive-diagnostics/; fi
+        if: always()
+      - name: Upload archive-diagnostics-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: archive-diagnostics-${{ needs.version.outputs.prefix }}
+          path: build/archive-diagnostics/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+      - name: Delete temporary signing material
+        run: bash "$IOS_RELEASE_ROOT/scripts/ci/cleanup_signing.sh"
+        if: always()
+    environment: signing
+    if: needs.version.outputs.candidate == 'true'
+    permissions: *a2
+  sbom:
+    name: Generate source and runtime SBOMs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - version
+      - build
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ needs.version.outputs.source_sha }}
+      - *a1
+      - name: Install verified Syft
+        run: bash "$IOS_RELEASE_ROOT/scripts/ci/install_syft.sh"
+      - name: Download build-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: build-${{ needs.version.outputs.prefix }}
+          path: build/ipa
+      - name: Inventory source and shipped components
+        run: >-
+          mkdir -p build/sbom build/ipa-root
+
+          syft dir:. --exclude './.git' --exclude './build' --exclude './node_modules' --exclude './vendor' -o
+          spdx-json=build/sbom/source.spdx.json
+
+          unzip -q build/ipa/application.ipa -d build/ipa-root
+
+          syft dir:build/ipa-root -o spdx-json=build/ipa-syft.spdx.json
+
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/runtime_sbom.py" build/ipa/ipa-inventory.json build/ipa-syft.spdx.json
+          build/sbom/ipa.spdx.json
+
+          python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" checksums build/sbom --output
+          build/sbom/sbom-checksums.json
+      - name: Upload sbom-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sbom-${{ needs.version.outputs.prefix }}
+          path: build/sbom/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    permissions: *a2
+  evidence:
+    name: Validate and attest build evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - version
+      - qa
+      - build
+      - package
+      - sbom
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ needs.version.outputs.source_sha }}
+      - *a1
+      - name: Download build-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: build-${{ needs.version.outputs.prefix }}
+          path: release-assets
+      - name: Download package-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: package-${{ needs.version.outputs.prefix }}
+          path: release-assets
+      - name: Download qa-evidence-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: qa-evidence-${{ needs.version.outputs.prefix }}
+          path: release-assets
+      - name: Download sbom-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: sbom-${{ needs.version.outputs.prefix }}
+          path: release-assets
+      - name: Validate all evidence and bind exact assets
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" build release-assets
+        env:
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+      - name: Attest IPA and build manifest
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: |-
+            release-assets/application.ipa
+            release-assets/release-build-manifest.json
+        id: attestation
+      - name: Preserve signed bundle
+        run: cp "$BUNDLE" release-assets/build-attestation.jsonl
+        env:
+          BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
+      - name: Attest runtime SBOM
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: release-assets/application.ipa
+          sbom-path: release-assets/ipa.spdx.json
+        id: sbom
+      - name: Preserve SBOM bundle
+        run: cp "$BUNDLE" release-assets/sbom-attestation.jsonl
+        env:
+          BUNDLE: ${{ steps.sbom.outputs.bundle-path }}
+      - name: Compute isolated generator subjects
+        run: |-
+          cd release-assets
+          shasum -a 256 application.ipa release-build-manifest.json release-source.tar.zst > slsa-subjects.txt
+          echo "subjects=$(base64 -w0 slsa-subjects.txt)" >> "$GITHUB_OUTPUT"
+        id: subjects
+      - name: Upload evidence-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evidence-${{ needs.version.outputs.prefix }}
+          path: release-assets/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      subjects: ${{ steps.subjects.outputs.subjects }}
+  provenance:
+    name: Isolated SLSA Build L3 provenance
+    needs:
+      - version
+      - evidence
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.evidence.outputs.subjects }}
+      upload-assets: false
+      provenance-name: provenance.intoto.jsonl
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - version
+      - provenance
+      - evidence
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ needs.version.outputs.source_sha }}
+      - *a1
+      - name: Download evidence-${{ needs.version.outputs.prefix }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: evidence-${{ needs.version.outputs.prefix }}
+          path: release-assets
+      - name: Download ${{ needs.provenance.outputs.provenance-name }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+          path: release-assets
+      - name: Install SLSA verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+      - name: Verify isolated provenance and every release asset
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/verify_release.py" release-assets --source "$SOURCE_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+      - name: Summarize verified candidate
+        run: echo "Verified source $SOURCE_SHA; candidate $VERSION ($BUILD_NUMBER). All QA, bundle and provenance checks
+          passed." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
+      - name: Upload verified-${{ needs.version.outputs.prefix }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-${{ needs.version.outputs.prefix }}
+          path: release-assets/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        id: candidate
+      - name: Show exact candidate promotion inputs
+        run: |-
+          printf 'Candidate artifact: %s
+          SHA256: %s
+          ' "$ARTIFACT_ID" "$ARTIFACT_SHA" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ARTIFACT_ID: ${{ steps.candidate.outputs.artifact-id }}
+          ARTIFACT_SHA: ${{ steps.candidate.outputs.artifact-digest }}
+    permissions:
+      contents: read
+      attestations: read
+    outputs:
+      artifact_id: ${{ steps.candidate.outputs.artifact-id }}
+      sha256: ${{ steps.candidate.outputs.artifact-digest }}
+  qa:
+    name: Release QA
+    needs: version
+    if: needs.version.outputs.candidate == 'true'
+    uses: $/.github/workflows/ci.yml
+    with:
+      config: ${{ inputs.config }}
+      platform_revision: ${{ inputs.platform_revision }}
+      source: ${{ needs.version.outputs.source_sha }}
+      prefix: ${{ needs.version.outputs.prefix }}

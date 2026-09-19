@@ -1,0 +1,262 @@
+name: Promote exact candidate
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/ios-release.json
+      platform_revision:
+        type: string
+        required: true
+      artifact_id:
+        type: string
+        required: true
+      sha256:
+        type: string
+        required: true
+      upload_adapter:
+        type: string
+        default: transporter
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: &a1
+      contents: read
+      attestations: read
+      actions: read
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - &a2
+        name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - &a3
+        name: Install pinned SLSA verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+      - &a4
+        name: Authenticate exact candidate
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.artifact_id }}
+          CANDIDATE_SHA256: ${{ inputs.sha256 }}
+      - name: Mint read-only control inspection token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        id: controls
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-administration: read
+          repositories: ${{ github.event.repository.name }}
+      - name: Check repository controls and repository plan
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/preflight.py"
+        env:
+          GH_TOKEN: ${{ steps.controls.outputs.token }}
+    if: github.ref == 'refs/heads/main' && (vars.TESTFLIGHT_CANARY_ENABLED == 'true' || vars.RELEASE_DISTRIBUTION_ENABLED ==
+      'true')
+    outputs:
+      source_sha: ${{ steps.candidate.outputs.source_sha }}
+      version: ${{ steps.candidate.outputs.version }}
+      build_number: ${{ steps.candidate.outputs.build_number }}
+      tag: ${{ steps.candidate.outputs.tag }}
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
+      already_published: ${{ steps.candidate.outputs.already_published }}
+    environment: release-publishing
+  upload:
+    runs-on: ${{ inputs.upload_adapter == 'build-uploads' && 'ubuntu-24.04' || 'xcode-27' }}
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - *a4
+      - &a5
+        name: Install locked platform gems
+        uses: $/actions/ruby
+      - name: Require explicit configured adapter
+        run: >-
+          python3 - <<'PY'
+
+          import json,os
+
+          assert json.load(open(os.environ['IOS_RELEASE_CONFIG']))['upload_adapter']==os.environ['ADAPTER'], 'Adapter
+          differs from verified candidate; no fallback'
+
+          PY
+        env:
+          ADAPTER: ${{ inputs.upload_adapter }}
+      - name: Recover this run’s earlier transfer receipt
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" upload-operation build/ --optional
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Transfer verified IPA
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" upload
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-build-manifest.json
+          OPERATION_RECEIPT: ${{ github.workspace }}/build/upload-operation.json
+      - name: Retain upload-operation-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: upload-operation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/upload-operation.json
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+    needs: verify
+    environment: testflight
+    concurrency: &a6
+      group: ios-app-store-${{ github.repository }}
+      cancel-in-progress: false
+    if: needs.verify.outputs.already_published != 'true'
+  processing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - *a4
+      - name: Restore upload-operation from this run
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" upload-operation build/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - *a5
+      - name: Wait for exact Apple upload and build
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" processing
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-build-manifest.json
+          OPERATION_RECEIPT: ${{ github.workspace }}/build/upload-operation.json
+          PROCESSING_RECEIPT: ${{ github.workspace }}/build/testflight-status.json
+      - name: Retain processed-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: processed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/testflight-status.json
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    needs:
+      - verify
+      - upload
+    environment: testflight
+    concurrency: *a6
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      attestations: write
+      actions: read
+      id-token: write
+      artifact-metadata: write
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - *a4
+      - name: Restore processed from this run
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" processed release-assets/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Bind processed Apple build to release
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" finalize release-assets
+      - name: Sign final release handoff
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: release-assets/release-manifest.json
+          predicate-type: https://northcutted.github.io/ios-release-workflows/release/v3
+          predicate-path: release-assets/release-manifest.json
+        id: attestation
+      - name: Preserve release signature
+        run: cp "$BUNDLE" release-assets/release-attestation.jsonl
+        env:
+          BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
+      - name: Retain final-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: final-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-assets/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    needs:
+      - verify
+      - processing
+    if: inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true'
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - name: Restore final from this run
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" final release-assets/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Authenticate final handoff
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/verify_release.py" release-assets --final
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Mint publisher token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        id: token
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-administration: read
+          repositories: ${{ github.event.repository.name }}
+      - name: Publish complete immutable release
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/publish_release.py"
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+    needs:
+      - verify
+      - finalize
+    environment: release-publishing

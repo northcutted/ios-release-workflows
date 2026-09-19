@@ -1,0 +1,138 @@
+require_relative "lib/release_operations"
+require_relative "lib/build_upload"
+require "precheck"
+require "shellwords"
+
+default_platform(:ios)
+ROOT = ENV.fetch("IOS_APP_ROOT")
+CONFIG = JSON.parse(File.read(ENV.fetch("IOS_RELEASE_CONFIG")))
+BUILD = File.join(ROOT, "build")
+ASSETS = File.join(ROOT, "release-assets")
+
+def project_options
+  key = CONFIG["workspace"] ? :workspace : :project
+  {key => File.join(ROOT, CONFIG.fetch(key.to_s)), scheme: CONFIG.fetch("scheme")}
+end
+
+def api_credentials
+  {key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"), issuer_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ISSUER_ID"), key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_CONTENT")}
+end
+
+def release_manifest
+  JSON.parse(File.read(ENV.fetch("RELEASE_MANIFEST")))
+end
+
+def strict_precheck(api_key)
+  options = FastlaneCore::Configuration.create(Precheck::Options.available_options,
+    api_key: api_key, app_identifier: CONFIG.fetch("app_store").fetch("bundle_id"),
+    include_in_app_purchases: false, default_rule_level: :error)
+  Precheck.config = options
+  # Do not use Deliver::Runner#precheck_app: it catches exceptions and can return true.
+  raise "App Store readiness check failed" unless Precheck::Runner.new.run == true
+end
+
+platform :ios do
+  lane :analyze do
+    xcodebuild(**project_options, configuration: "Debug", sdk: "iphonesimulator",
+      destination: ENV.fetch("TEST_DESTINATION"), xcargs: "CODE_SIGNING_ALLOWED=NO", analyze: true, buildlog_path: "#{BUILD}/logs")
+  end
+
+  lane :test do
+    workers = Integer(ENV.fetch("TEST_WORKERS", "1"))
+    run_tests(**project_options, destination: ENV.fetch("TEST_DESTINATION"), xcargs: "CODE_SIGNING_ALLOWED=NO", clean: true,
+      disable_concurrent_testing: workers == 1, parallel_testing: workers == 2, concurrent_workers: workers,
+      result_bundle: true, output_directory: "#{BUILD}/test_output", output_files: "report.junit", output_types: "junit",
+      only_testing: CONFIG.fetch("test_targets"), fail_build: true)
+  end
+
+  lane :certificates do
+    create_keychain(path: ENV.fetch("SIGNING_KEYCHAIN"), password: ENV.fetch("SIGNING_KEYCHAIN_PASSWORD"), default_keychain: false, unlock: true, timeout: 3600)
+    match(type: "appstore", app_identifier: CONFIG.fetch("targets").map { |t| t.fetch("bundle_id") }, readonly: true,
+      git_url: ENV.fetch("MATCH_GIT_URL"), git_branch: "ci-snapshot", team_id: CONFIG.fetch("team_id"),
+      keychain_name: ENV.fetch("SIGNING_KEYCHAIN"), keychain_password: ENV.fetch("SIGNING_KEYCHAIN_PASSWORD"))
+  end
+
+  lane :build do
+    number, version = ENV.fetch("BUILD_NUMBER"), ENV.fetch("VERSION")
+    raise "Invalid version/build" unless number.match?(/\A[1-9]\d{0,3}\.[1-9]\d?\z/) && version.match?(/\A\d+\.\d+\.\d+\z/)
+    gym(**project_options, configuration: "Release", clean: true, output_directory: BUILD, output_name: "application.ipa",
+      buildlog_path: "#{BUILD}/logs", archive_path: "#{BUILD}/application.xcarchive", include_symbols: true,
+      export_method: "app-store", xcargs: "MARKETING_VERSION=#{version} CURRENT_PROJECT_VERSION=#{number}",
+      export_options: {method: "app-store-connect", signingStyle: "manual", teamID: CONFIG.fetch("team_id"), manageAppVersionAndBuildNumber: false,
+        provisioningProfiles: CONFIG.fetch("targets").to_h { |t| [t.fetch("bundle_id"), t.fetch("profile")] }})
+  end
+
+  lane :upload do
+    manifest = release_manifest
+    uploader = BuildUpload.new(manifest, config: CONFIG)
+    ipa = File.join(ASSETS, "application.ipa")
+    raise "IPA digest changed" unless Digest::SHA256.file(ipa).hexdigest == manifest.fetch("ipa_sha256")
+    if CONFIG.fetch("upload_adapter") == "build-uploads"
+      uploader.upload!(ipa)
+    else
+      # Recover only when Apple's upload-file checksum proves the accepted bytes.
+      unless uploader.reconcile_accepted!
+        uploader.record_intent!
+        upload_to_testflight(ipa: ipa, api_key: app_store_connect_api_key(**api_credentials),
+          app_identifier: CONFIG.fetch("app_store").fetch("bundle_id"),
+          uses_non_exempt_encryption: CONFIG.fetch("targets").first.fetch("non_exempt_encryption"),
+          skip_waiting_for_build_processing: true, skip_submission: true)
+        uploader.checkpoint("status" => "transferred")
+      end
+    end
+  end
+
+  lane :processing do
+    uploader = BuildUpload.new(release_manifest, config: CONFIG)
+    status = uploader.wait_for_verified_processing!
+    ReleaseGuard.save(ENV.fetch("PROCESSING_RECEIPT"), status)
+    ReleaseOperations.new(release_manifest.merge(status), config: CONFIG, receipt_path: "#{BUILD}/groups.json").testflight_groups!
+  end
+
+  lane :stage do
+    manifest = release_manifest
+    guard = ReleaseOperations.new(manifest, config: CONFIG)
+    api_key = app_store_connect_api_key(**api_credentials)
+    existing = guard.find_build
+    raise "Wrong processed build" unless existing && existing["id"] == manifest.fetch("app_store_build_id") && existing.dig("attributes", "processingState") == "VALID"
+    versions = guard.list("/v1/apps/#{guard.app_id}/appStoreVersions", "filter[versionString]" => manifest.fetch("version"), "filter[platform]" => "IOS")
+    state = versions.first&.dig("attributes", "appVersionState") || versions.first&.dig("attributes", "appStoreState")
+    unless ReleaseGuard::SUBMITTED_STATES.include?(state)
+      upload_to_app_store(api_key: api_key, app_identifier: CONFIG.fetch("app_store").fetch("bundle_id"),
+        app_version: manifest.fetch("version"), skip_binary_upload: true, submit_for_review: false,
+        automatic_release: false, phased_release: nil,
+        primary_category: CONFIG.fetch("app_store")["primary_category"], secondary_category: CONFIG.fetch("app_store")["secondary_category"],
+        metadata_path: File.join(ASSETS, "metadata"), screenshots_path: File.join(ASSETS, "screenshots"),
+        skip_screenshots: ENV["METADATA_ONLY"] == "true", overwrite_screenshots: true,
+        run_precheck_before_submit: false, force: true)
+      guard.select_build!
+      guard.sync_compliance!
+      if File.file?(File.join(ASSETS, "accessibility.json"))
+        sync_accessibility_declarations(app_identifier: CONFIG.fetch("app_store").fetch("bundle_id"),
+          **api_credentials, is_key_content_base64: false, config_path: File.join(ASSETS, "accessibility.json"))
+      end
+      strict_precheck(api_key)
+    end
+    ReleaseGuard.save(ENV.fetch("STAGED_SNAPSHOT"), guard.snapshot)
+  end
+
+  lane :submit do
+    guard = ReleaseOperations.new(release_manifest, config: CONFIG)
+    before = JSON.parse(File.read(ENV.fetch("STAGED_SNAPSHOT")))
+    current = guard.snapshot
+    raise "Staging snapshot belongs to another release" unless before["app_store_build_id"] == current["app_store_build_id"] && before["source_sha"] == current["source_sha"]
+    guard.checkpoint("snapshot" => current, "changes_since_staging" => ReleaseGuard.diff(before, current),
+      "manifest_sha256" => Digest::SHA256.file(ENV.fetch("RELEASE_MANIFEST")).hexdigest)
+    strict_precheck(app_store_connect_api_key(**api_credentials))
+    guard.submit!
+  end
+
+  lane :observe do
+    guard = ReleaseGuard.new(release_manifest, config: CONFIG)
+    version = guard.version
+    phased = guard.optional_get("/v1/appStoreVersions/#{version.fetch('id')}/appStoreVersionPhasedRelease")["data"]
+    ReleaseGuard.save(ENV.fetch("OBSERVATION_RECEIPT"), {"candidate_id" => release_manifest.fetch("candidate_id"),
+      "build" => guard.find_build&.slice("id", "attributes"), "version" => version.slice("id", "attributes"),
+      "phased_release" => phased, "observed_at" => Time.now.utc.iso8601})
+  end
+end

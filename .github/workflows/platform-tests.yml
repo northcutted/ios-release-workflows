@@ -1,0 +1,56 @@
+name: Platform checks
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-24.04
+          - macos-26
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: Create consumer bootstrap fixture
+        run: |-
+          python3 - <<'PY'
+          import json,os,pathlib
+          config=json.loads(pathlib.Path('examples/minimal.json').read_text())
+          config['repository']=os.environ['GITHUB_REPOSITORY']
+          pathlib.Path('build').mkdir(exist_ok=True)
+          pathlib.Path('build/consumer.json').write_text(json.dumps(config))
+          PY
+      - uses: $/actions/bootstrap
+        with:
+          config: build/consumer.json
+          revision: ${{ github.sha }}
+      - uses: $/actions/ruby
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run cross-consumer and release regression tests
+        run: env -u GITHUB_REPOSITORY IOS_RELEASE_CONFIG="$PWD/examples/picstrip.json"
+          IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff npm run test:ci
+      - name: Install pinned workflow validator
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/install_actionlint.sh
+      - name: Check workflow boundaries and syntax
+        if: runner.os == 'Linux'
+        run: npm run check:workflows
+      - name: Check Ruby and shell syntax
+        run: |-
+          ruby -c fastlane/Fastfile
+          for script in scripts/ci/*.sh; do bash -n "$script"; done

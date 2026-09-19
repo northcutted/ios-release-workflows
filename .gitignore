@@ -1,0 +1,8 @@
+node_modules
+vendor/
+.bundle/
+__pycache__/
+*.pyc
+build/
+release-assets/
+.DS_Store

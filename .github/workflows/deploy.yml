@@ -1,0 +1,186 @@
+name: Deploy verified release
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/ios-release.json
+      platform_revision:
+        type: string
+        required: true
+      release_tag:
+        type: string
+        required: true
+      metadata_commit:
+        type: string
+        default: ""
+      submit:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: &a1
+      contents: read
+      attestations: read
+      actions: read
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - &a2
+        name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - &a3
+        name: Install pinned SLSA verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+      - &a4
+        name: Authenticate published release
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+    if: vars.RELEASE_DISTRIBUTION_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/v') && github.ref_name ==
+      inputs.release_tag
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - *a4
+      - name: Extract authenticated metadata and screenshots
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/expand.py"
+      - name: Resolve approved metadata-only update
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/metadata_update.py"
+        if: inputs.metadata_commit != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          METADATA_COMMIT: ${{ inputs.metadata_commit }}
+      - &a5
+        name: Install locked platform gems
+        uses: $/actions/ruby
+      - name: Stage exact processed build
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" stage
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-manifest.json
+          STAGED_SNAPSHOT: ${{ github.workspace }}/build/staged-snapshot.json
+          OPERATION_RECEIPT: ${{ github.workspace }}/build/stage-operation.json
+          METADATA_ONLY: ${{ inputs.metadata_commit != '' && 'true' || 'false' }}
+      - name: Retain staged-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: staged-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/*.json
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+    needs: verify
+    environment: app-store-staging
+    concurrency: &a6
+      group: ios-app-store-${{ github.repository }}
+      cancel-in-progress: false
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: *a1
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - *a3
+      - *a4
+      - name: Restore staged from this run
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" staged build/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - *a5
+      - name: Submit and confirm exact build after approval
+        run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" submit
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          RELEASE_ENVIRONMENT: production
+          RELEASE_MANIFEST: ${{ github.workspace }}/release-assets/release-manifest.json
+          STAGED_SNAPSHOT: ${{ github.workspace }}/build/staged-snapshot.json
+          OPERATION_RECEIPT: ${{ github.workspace }}/build/submission-receipt.json
+      - name: Retain submission-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: submission-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/*.json
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+        if: always()
+    needs: stage
+    if: inputs.submit
+    environment: production
+    concurrency: *a6
+  receipt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      actions: read
+    steps:
+      - name: Checkout data and source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: main
+      - *a2
+      - name: Restore submission from this run
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" submission receipts/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Sign separate submission receipt
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: receipts/*.json
+          predicate-type: https://northcutted.github.io/ios-release-workflows/submission/v1
+          predicate-path: receipts/submission-receipt.json
+        id: receipt
+      - name: Save receipt bundle
+        run: cp "$BUNDLE" receipts/attestation.jsonl
+        env:
+          BUNDLE: ${{ steps.receipt.outputs.bundle-path }}
+      - name: Retain signed-submission-${{ github.run_id }}-${{ github.run_attempt }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: signed-submission-${{ github.run_id }}-${{ github.run_attempt }}
+          path: receipts/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+    needs: review
