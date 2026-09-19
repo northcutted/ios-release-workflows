@@ -9,12 +9,13 @@ class ReleaseOperationsTest < Minitest::Test
     @config = JSON.parse(File.read(File.expand_path('../../../examples/picstrip.json', __dir__)))
     @manifest = {'schema_version'=>3, 'candidate_id'=>'repo:1:1:hash', 'source_sha'=>'a'*40, 'version'=>'1.7.0', 'build_number'=>'100.1', 'ipa_sha256'=>'c'*64,
       'app_store_build_id'=>'verified', 'app'=>{'bundle_id'=>@config['app_store']['bundle_id'], 'team_id'=>@config['team_id']}}
+    @encryption=false; @ignore_encryption_write=false
     @selected=nil; @phased=nil; @release_type='MANUAL'; @state='PREPARE_FOR_SUBMISSION'; @submission=nil; @items=[]; @writes=[]
     @guard=ReleaseOperations.new(@manifest, config:@config, client:method(:read), writer:method(:write), receipt_path:File.join(@directory,'receipt.json'))
   end
   def teardown; FileUtils.remove_entry(@directory); end
   def build
-    {'id'=>'verified','type'=>'builds','attributes'=>{'version'=>'100.1','processingState'=>'VALID','usesNonExemptEncryption'=>false}, 'relationships'=>{'app'=>{'data'=>{'id'=>'app'}},'preReleaseVersion'=>{'data'=>{'id'=>'prerelease'}}}}
+    {'id'=>'verified','type'=>'builds','attributes'=>{'version'=>'100.1','processingState'=>'VALID','usesNonExemptEncryption'=>@encryption}, 'relationships'=>{'app'=>{'data'=>{'id'=>'app'}},'preReleaseVersion'=>{'data'=>{'id'=>'prerelease'}}}}
   end
   def read(path, query={})
     case path
@@ -33,6 +34,7 @@ class ReleaseOperationsTest < Minitest::Test
   def write(method, path, payload)
     @writes << [method,path,payload]
     case path
+    when '/v1/builds/verified' then @encryption=payload['data']['attributes']['usesNonExemptEncryption'] unless @ignore_encryption_write; {}
     when '/v1/appStoreVersions/version/relationships/build' then @selected=build; {}
     when '/v1/appStoreVersions/version' then @release_type=payload['data']['attributes']['releaseType']; {}
     when '/v1/appStoreVersionPhasedReleases' then @phased={'id'=>'phased','attributes'=>{'phasedReleaseState'=>'INACTIVE'}}; {'data'=>@phased}
@@ -49,6 +51,25 @@ class ReleaseOperationsTest < Minitest::Test
     before=ENV['RELEASE_ENVIRONMENT']; ENV['RELEASE_ENVIRONMENT']='production'; yield
   ensure
     before ? ENV['RELEASE_ENVIRONMENT']=before : ENV.delete('RELEASE_ENVIRONMENT')
+  end
+  def test_matching_encryption_declaration_is_read_only_for_both_declared_values
+    @config['app_store']['age_rating']={}
+    [false,true].each do |value|
+      @encryption=value; @config['targets'].first['non_exempt_encryption']=value
+      @guard.sync_compliance!
+      assert_empty @writes
+    end
+  end
+  def test_missing_encryption_declaration_is_written_once_and_read_back
+    @config['app_store']['age_rating']={}; @encryption=nil
+    @guard.sync_compliance!
+    @guard.sync_compliance!
+    assert_equal false,@encryption
+    assert_equal 1,@writes.length
+  end
+  def test_encryption_update_requires_matching_readback
+    @config['app_store']['age_rating']={}; @encryption=nil; @ignore_encryption_write=true
+    assert_raises(RuntimeError){@guard.sync_compliance!}
   end
   def test_fresh_draft_explicitly_attaches_build_and_rechecks
     @guard.select_build!

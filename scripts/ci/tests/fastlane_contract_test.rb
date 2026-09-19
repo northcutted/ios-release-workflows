@@ -21,6 +21,7 @@ class FastlaneContractTest < Minitest::Test
   def test_actual_stage_lane_selects_build_before_snapshot
     manifest={'version'=>'1.7.0','app_store_build_id'=>'verified','build_number'=>'100.1'}
     calls=[]
+    upload_options=nil
     fake=Object.new
     fake.define_singleton_method(:app_id){'app'}
     fake.define_singleton_method(:find_build){{'id'=>'verified','attributes'=>{'processingState'=>'VALID'}}}
@@ -35,10 +36,34 @@ class FastlaneContractTest < Minitest::Test
     ff.define_singleton_method(:strict_precheck){|_|calls << :precheck}
     ff.define_singleton_method(:upload_to_app_store) do |**options|
       raise 'Staging must never submit' if options[:submit_for_review]
+      upload_options=options
       calls << :metadata
     end
     ReleaseOperations.stub(:new,fake){ff.runner.execute(:stage,:ios)}
     assert_equal [:metadata,:select,:compliance,:precheck,:snapshot],calls
+    assert_equal 120,upload_options.fetch(:screenshot_processing_timeout)
+  end
+  def test_locked_screenshot_recovery_keeps_complete_images_and_retries_pending_only
+    deleted=[]
+    complete=Object.new
+    complete.define_singleton_method(:complete?){true}
+    complete.define_singleton_method(:source_file_checksum){'verified-checksum'}
+    complete.define_singleton_method(:delete!){raise 'Completed screenshot must be preserved'}
+    pending=Object.new
+    pending.define_singleton_method(:complete?){false}
+    pending.define_singleton_method(:delete!){deleted << :pending}
+    iterator=Object.new
+    iterator.define_singleton_method(:each_app_screenshot) do |&block|
+      [[nil,nil,complete],[nil,nil,pending]].each(&block)
+    end
+    uploader=Deliver::UploadScreenshots.new
+    retried=[]
+    uploader.define_singleton_method(:upload_screenshots) do |locales,screens,timeout,tries:|
+      retried << [locales,screens,timeout,tries]
+    end
+    uploader.retry_upload_screenshots_if_needed(iterator,{'COMPLETE'=>159,'UPLOAD_COMPLETE'=>1},160,4,120,[:locale],{})
+    assert_equal [:pending],deleted
+    assert_equal [[[:locale],{},120,4]],retried
   end
   def test_precheck_errors_do_not_turn_into_success
     ff=Fastlane::FastFile.new(File.expand_path('../../../fastlane/Fastfile',__dir__))

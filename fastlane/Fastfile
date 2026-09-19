@@ -113,6 +113,7 @@ platform :ios do
         primary_category: CONFIG.fetch("app_store")["primary_category"], secondary_category: CONFIG.fetch("app_store")["secondary_category"],
         metadata_path: File.join(ASSETS, "metadata"), screenshots_path: File.join(ASSETS, "screenshots"),
         skip_screenshots: ENV["METADATA_ONLY"] == "true", overwrite_screenshots: true,
+        screenshot_processing_timeout: 120,
         run_precheck_before_submit: false, force: true)
       guard.select_build!
       guard.sync_compliance!
