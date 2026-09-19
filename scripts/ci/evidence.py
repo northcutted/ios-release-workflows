@@ -51,7 +51,7 @@ def identity(data):
     require(data.get("app") == {"bundle_id": CONFIG["app_store"]["bundle_id"], "team_id": CONFIG["team_id"]}, "Wrong app/team")
     require(data.get("producer", {}).get("repository") == PRODUCER, "Wrong producer")
     require(data.get("producer", {}).get("workflow") == ".github/workflows/prepare.yml", "Wrong producer workflow")
-    require(data.get("producer", {}).get("revision") == os.environ["IOS_RELEASE_REVISION"], "Wrong producer revision")
+    trusted_revision(data.get("producer", {}).get("revision"))
     require(re.fullmatch(r"[a-f0-9]{64}", data.get("config_sha256", "")), "Missing configuration digest")
     require(data.get("source_ref") == "refs/heads/main", "Release source must be main")
     require(re.fullmatch(r"[0-9a-f]{40}", data.get("source_sha", "")), "Invalid source SHA")
@@ -59,6 +59,16 @@ def identity(data):
     require(data.get("tag") == "v" + data["version"], "Tag/version mismatch")
     require(re.fullmatch(r"[1-9]\d{0,3}\.[1-9]\d?", data.get("build_number", "")), "Invalid build number")
     require(all(re.fullmatch(r"[1-9]\d*", str(data.get(k, ""))) for k in ("run_id", "run_attempt")), "Missing run identity")
+
+
+def trusted_revision(revision):
+    approved = json.loads(os.environ.get('IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS',
+                                        json.dumps([os.environ['IOS_RELEASE_REVISION']])))
+    require(isinstance(approved, list) and approved and len(approved) <= 21 and
+            all(isinstance(value, str) and re.fullmatch(r'[a-f0-9]{40}', value) for value in approved),
+            'Invalid trusted producer policy')
+    require(isinstance(revision, str) and revision in approved, 'Wrong or unapproved producer revision')
+    return revision
 
 
 def context():

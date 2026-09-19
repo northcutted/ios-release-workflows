@@ -307,6 +307,10 @@ jobs:
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/publish_release.py"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+      - name: Create protected deployment ref for updated tools
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/deployment_ref.py" create
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
     needs:
       - verify
       - finalize

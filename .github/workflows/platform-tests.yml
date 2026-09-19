@@ -43,7 +43,9 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run cross-consumer and release regression tests
         run: env -u GITHUB_REPOSITORY IOS_RELEASE_CONFIG="$PWD/examples/picstrip.json"
-          IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff npm run test:ci
+          IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff
+          IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS='["ffffffffffffffffffffffffffffffffffffffff"]'
+          npm run test:ci
       - name: Install pinned workflow validator
         if: runner.os == 'Linux'
         run: bash scripts/ci/install_actionlint.sh

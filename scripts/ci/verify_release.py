@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from evidence import CONFIG, PRODUCER, require, validate_manifest
+from evidence import CONFIG, PRODUCER, require, validate_manifest, trusted_revision
 
 
 def native_command(root, final=False):
@@ -13,9 +13,11 @@ def native_command(root, final=False):
     filename = 'release-manifest.json' if final else 'release-build-manifest.json'
     bundle = 'release-attestation.jsonl' if final else 'build-attestation.jsonl'
     predicate = 'https://northcutted.github.io/ios-release-workflows/release/v3' if final else 'https://slsa.dev/provenance/v1'
+    data = json.loads((Path(root) / filename).read_text())
+    revision = trusted_revision(data.get('promotion' if final else 'producer', {}).get('revision'))
     return ['gh', 'attestation', 'verify', str(Path(root) / filename), '--bundle', str(Path(root) / bundle),
             '--repo', CONFIG['repository'], '--signer-workflow', f'github.com/{PRODUCER}/.github/workflows/{workflow}.yml',
-            '--source-ref', 'refs/heads/main', '--signer-digest', os.environ['IOS_RELEASE_REVISION'],
+            '--source-ref', 'refs/heads/main', '--signer-digest', revision,
             '--deny-self-hosted-runners', '--predicate-type', predicate]
 
 
@@ -41,7 +43,7 @@ def verify(root, source=None, tag=None, final=False, consumed=None):
     manifest = validate_manifest(root, 'release-manifest.json' if final else 'release-build-manifest.json', source, tag, final, consumed)
     subprocess.run(native_command(root) + ['--source-digest', manifest['source_sha']], check=True)
     if final:
-        require(manifest['promotion']['revision'] == os.environ['IOS_RELEASE_REVISION'], 'Wrong promotion producer')
+        trusted_revision(manifest['promotion']['revision'])
         subprocess.run(command + ['--source-digest', manifest['promotion']['source_sha']], check=True)
     result = subprocess.check_output(['slsa-verifier', 'verify-artifact', str(root / 'release-build-manifest.json'),
         '--provenance-path', str(root / 'provenance.intoto.jsonl'), '--source-uri', f"github.com/{CONFIG['repository']}",

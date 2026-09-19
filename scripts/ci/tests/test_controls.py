@@ -9,6 +9,15 @@ from preflight import check_controls, verified_bypasses
 from capture_controls import capture
 
 class ControlTests(unittest.TestCase):
+    def test_ruleset_timestamp_compares_instants_without_losing_precision(self):
+        rule = {'id': 1, 'node_id': 'node', 'name': 'Main', 'updated_at': '2026-09-19T14:10:53.839Z'}
+        baseline = dict(rule, updated_at='2026-09-19T09:10:53.839-05:00', bypass_actors=[], bypass_nodes=[])
+        connection = {'totalCount': 0, 'pageInfo': {'hasNextPage': False}, 'nodes': []}
+        self.assertEqual([], verified_bypasses(rule, baseline, lambda _: connection))
+        for timestamp in ('2026-09-19T14:10:53.840Z', '2026-09-19T14:10:53.839', None, ''):
+            with self.subTest(timestamp=timestamp), self.assertRaises(ValueError):
+                verified_bypasses(dict(rule, updated_at=timestamp), baseline, lambda _: connection)
+
     def test_hidden_bypasses_require_unchanged_owner_baseline_and_complete_readback(self):
         rule = {'id': 2, 'node_id': 'ruleset-node', 'name': 'Release tags', 'updated_at': '2026-09-19T14:10:54.323Z'}
         nodes = [{'id': 'private-app-bypass-node', 'bypassMode': 'ALWAYS'}]
