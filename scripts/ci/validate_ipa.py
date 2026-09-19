@@ -21,6 +21,13 @@ def uuid_set(path):
     return {line.split()[1] for line in run("xcrun", "dwarfdump", "--uuid", str(path)).decode().splitlines() if line.startswith("UUID:")}
 
 
+def signing_certificate_digest(app, prefix):
+    # codesign's optional output prefix must be attached to the long option.
+    # A separate argument is interpreted as another input path.
+    run("codesign", "--display", f"--extract-certificates={prefix}", str(app))
+    return digest(str(prefix) + "0")
+
+
 def main():
     ipa = Path("build/application.ipa")
     with tempfile.TemporaryDirectory(prefix="ios-release-ipa-") as directory:
@@ -65,8 +72,7 @@ def main():
             require(uuids and uuids <= available_symbols, "Missing matching dSYMs")
             certs = [hashlib.sha256(cert).hexdigest() for cert in profile["DeveloperCertificates"]]
             certificate_prefix = str(root / f"signing-certificate-{len(records)}-")
-            run("codesign", "--display", "--extract-certificates", certificate_prefix, str(app))
-            leaf_digest = digest(certificate_prefix + "0")
+            leaf_digest = signing_certificate_digest(app, certificate_prefix)
             require(leaf_digest in certs, "Signing certificate is not authorized by embedded profile")
             certificates.add(leaf_digest)
             records.append({"bundle_id": bundle, "version": info["CFBundleShortVersionString"],
