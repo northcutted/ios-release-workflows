@@ -41,7 +41,7 @@ jobs:
           config: ${{ inputs.config }}
           revision: ${{ inputs.platform_revision }}
       - name: Install pinned SLSA verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+        uses: $/actions/slsa-verifier
       - name: Install locked platform gems
         uses: $/actions/ruby
       - name: Find active immutable releases

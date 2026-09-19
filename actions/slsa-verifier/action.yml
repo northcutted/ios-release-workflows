@@ -1,0 +1,19 @@
+name: Install verified SLSA verifier
+description: Install the pinned verifier on supported hosted Linux and macOS runners.
+runs:
+  using: composite
+  steps:
+    - name: Require a supported verifier platform
+      shell: bash
+      run: |
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          Linux/X64|macOS/ARM64|macOS/X64) ;;
+          *) echo 'Unsupported SLSA verifier runner platform' >&2; exit 1 ;;
+        esac
+    - name: Install upstream Linux verifier
+      if: runner.os == 'Linux'
+      uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+    - name: Install checksum-pinned macOS verifier and verify its provenance
+      if: runner.os == 'macOS'
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/../../scripts/ci/install_macos_verifier.py"

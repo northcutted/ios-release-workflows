@@ -52,7 +52,7 @@ jobs:
           revision: ${{ inputs.platform_revision }}
       - &a3
         name: Install pinned SLSA verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+        uses: $/actions/slsa-verifier
       - name: Validate protected deployment ref
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/deployment_ref.py" verify
         env:
