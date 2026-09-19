@@ -120,6 +120,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - *a5
+      - name: Resume this run's earlier review receipt
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/restore_operation.py" submission build/ --optional
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Submit and confirm exact build after approval
         run: bundle exec ruby "$IOS_RELEASE_ROOT/scripts/fastlane.rb" submit
         env:
