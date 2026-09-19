@@ -246,7 +246,7 @@ jobs:
       - name: Bind processed Apple build to release
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" finalize release-assets
       - name: Sign final release handoff
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: release-assets/release-manifest.json
           predicate-type: https://northcutted.github.io/ios-release-workflows/release/v3
