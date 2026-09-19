@@ -53,6 +53,11 @@ jobs:
       - &a3
         name: Install pinned SLSA verifier
         uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+      - name: Validate protected deployment ref
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/deployment_ref.py" verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
       - &a4
         name: Authenticate published release
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" release
@@ -60,8 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-    if: vars.RELEASE_DISTRIBUTION_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/v') && github.ref_name ==
-      inputs.release_tag
+    if: vars.RELEASE_DISTRIBUTION_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/v')
   stage:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

@@ -36,7 +36,7 @@ test('read-only analysis preserves release rules and does not tag or dirty sourc
 test('ignore unrelated tags and use highest reachable stable semantic version', async t => {
   const {cwd, git, commit} = repository(t);
   git('checkout', '-b', 'unrelated'); commit('feat: other branch'); git('tag', 'v99.0.0'); git('checkout', 'main');
-  git('tag', 'v2.0.0-beta.1'); commit('perf: accelerate scan');
+  git('tag', 'v2.0.0-beta.1'); git('tag', `v9.0.0-deploy-${'a'.repeat(40)}`); commit('perf: accelerate scan');
   assert.equal((await analyze(cwd)).version, '1.6.6');
 });
 test('a reverted change alone does not create a release', async t => {
