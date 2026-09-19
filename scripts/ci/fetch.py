@@ -82,7 +82,7 @@ def candidate(artifact_id, expected_digest):
     return outputs(manifest)
 
 
-def processed(artifact_id, expected_digest):
+def processed(artifact_id, expected_digest, full=False):
     """An explicit, signed canary handoff can be promoted without another transfer."""
     require(re.fullmatch(r'[1-9]\d*', artifact_id), 'An explicit processed artifact ID is required')
     require(re.fullmatch(r'[a-f0-9]{64}', expected_digest), 'An explicit processed SHA256 is required')
@@ -93,12 +93,17 @@ def processed(artifact_id, expected_digest):
         extract_artifact(artifact_id, expected_digest, temp)
         manifest = verify(temp, source=candidate_manifest['source_sha'], final=True)
         require(manifest['candidate_id'] == candidate_manifest['candidate_id'], 'Processed handoff belongs to another candidate')
+        require(digest(Path(temp) / 'release-build-manifest.json') == digest('release-assets/release-build-manifest.json'),
+                'Processed handoff changes the original build evidence')
         promotion = manifest['promotion']
         require(str(artifact['workflow_run']['id']) == str(promotion['run_id']), 'Wrong promotion run')
         require(artifact['name'] == f"final-{promotion['run_id']}-{promotion['run_attempt']}", 'Wrong processed artifact')
-        # Only the signed processing receipt is needed; never execute artifact code.
+        # Publication reuses the original signed bytes, including operation IDs.
+        # Processing alone needs only the receipt. Never execute artifact code.
         import shutil
-        shutil.copyfile(Path(temp) / 'testflight-status.json', 'release-assets/testflight-status.json')
+        names = ({a['name'] for a in manifest['artifacts']} | {'release-manifest.json', 'release-attestation.jsonl'}) if full else {'testflight-status.json'}
+        for name in names:
+            shutil.copyfile(Path(temp) / name, Path('release-assets') / name)
     print('Authenticated processed candidate; no new upload required')
 
 
@@ -127,10 +132,12 @@ def release(tag, mode="deploy", emit=True):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('kind', choices=['candidate', 'processed', 'release'])
+    parser.add_argument('--full', action='store_true', help='Preserve an authenticated processed handoff byte for byte')
+    parser.add_argument('--mode', choices=['deploy', 'observe'], default='deploy')
     args = parser.parse_args()
     if args.kind == 'candidate':
         candidate(os.environ['CANDIDATE_ARTIFACT_ID'], os.environ['CANDIDATE_SHA256'])
     elif args.kind == 'processed':
-        processed(os.environ['PROCESSED_ARTIFACT_ID'], os.environ['PROCESSED_SHA256'])
+        processed(os.environ['PROCESSED_ARTIFACT_ID'], os.environ['PROCESSED_SHA256'], args.full)
     else:
-        release(os.environ['RELEASE_TAG'])
+        release(os.environ['RELEASE_TAG'], mode=args.mode)
