@@ -14,7 +14,7 @@ Each Apple app must have one owning release repository: GitHub concurrency locks
 2. Commit reviewed metadata/screenshots and a Conventional Commits `.releaserc.json`. Configure the exact installed Xcode/SDK/runtime and simulator names. `build_number_offset` must preserve monotonic build numbers when migrating an existing preparation workflow.
 3. Create protected environments: `signing`, `testflight`, `release-publishing`, `app-store-staging`, `production`, and `app-store-observe`. Keep signing and promotion environments on main, staging/production on `v*` tags, and production approval mandatory with administrator bypass disabled.
 4. Put signing secrets only in `signing`; App Store keys in the environments that need them; publisher App credentials only in `release-publishing`. Do not use `secrets: inherit`. Bind only the named secrets declared by each release interface (`NAME: ${{ secrets.NAME }}`); repository copies are unnecessary. GitHub needs these explicit bindings even when the protected job environment supplies the value. CI declares and receives no release secrets. Use narrowly scoped, consumer-owned Apple keys and publisher Apps.
-5. Require PRs and the caller's always-reporting `CI Gate`, restrict `v*` tag creation/update/deletion to the publisher App, and enable immutable releases. The publisher App needs repository contents write and administration read. Keep `RELEASE_DISTRIBUTION_ENABLED` unset/false until rollout passes.
+5. Require PRs and the caller's always-reporting `CI Gate`, restrict `v*` tag creation/update/deletion to the publisher App, and enable immutable releases. The publisher App needs repository contents write and administration read. Capture the owner-verified controls baseline below before promotion. Keep `RELEASE_DISTRIBUTION_ENABLED` unset/false until rollout passes.
 
 ## Interfaces
 
@@ -57,3 +57,16 @@ Dependabot groups release-analysis packages because parser and preset major vers
 The notes generator 14.1.1 requests writer 8, while the Conventional Commits 10.4.0 preset requires writer 9. A scoped npm override pins `conventional-changelog-writer` to 9.2.1, whose `writeChangelogString` export is compatible with the generator. Remove this override when the generator supports writer 9, with the regression suite passing. See the [preset release notes](https://github.com/conventional-changelog/conventional-changelog/releases/tag/conventional-changelog-conventionalcommits-v10.4.0).
 
 Minitest 6 extracted mocks into [minitest-mock](https://github.com/minitest/minitest-mock); contract tests declare and require that dependency explicitly. Ruby dependencies remain locked with checksums.
+
+## Read-only repository control verification
+
+GitHub [redacts REST ruleset bypass actors](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset) from tokens that cannot edit rulesets. Keep the publisher at administration read. In an owner-authenticated shell, after applying the repository protections, run:
+
+```sh
+IOS_RELEASE_CONFIG=/path/to/app/.github/ios-release.json \
+  python3 scripts/ci/capture_controls.py --publisher-app-id YOUR_APP_ID --output /tmp/controls.json
+```
+
+Copy the resulting object into the app configuration's `github_controls` field and review it through the required PR. Capture compares owner-visible REST bypass actors with complete GraphQL actor nodes and checks that the ruleset did not change during capture. The baseline binds the publisher App ID, ruleset IDs, actor-node IDs and server-controlled modification timestamps. It contains no credentials.
+
+Promotion checks all public protections live. If bypass details are hidden, it additionally requires exact baseline IDs and timestamps plus a complete matching GraphQL bypass list. Missing, truncated, inaccessible or changed evidence fails closed. A private App may have a null GraphQL actor object; its bypass-node identity remains bound to the owner-observed App by the unchanged ruleset timestamp. Any ruleset edit requires owner inspection and a reviewed baseline update, even if the edit is benign. Do not generate or refresh this baseline automatically in a privileged release job.
