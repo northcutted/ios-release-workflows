@@ -26,6 +26,22 @@ on:
       processed_sha256:
         type: string
         default: ""
+    secrets:
+      APP_STORE_CONNECT_API_KEY_ID:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      APP_STORE_CONNECT_API_KEY_CONTENT:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      RELEASE_APP_ID:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
 permissions:
   contents: read
 jobs:
@@ -295,4 +311,5 @@ jobs:
       - verify
       - finalize
     environment: release-publishing
-    if: always() && needs.verify.result == 'success' && needs.finalize.result == 'success' && inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true'
+    if: always() && needs.verify.result == 'success' && needs.finalize.result == 'success' && inputs.publish &&
+      vars.RELEASE_DISTRIBUTION_ENABLED == 'true'

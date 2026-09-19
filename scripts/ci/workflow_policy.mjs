@@ -9,6 +9,9 @@ export function validate(workflows) {
  for(const [file,w] of Object.entries(workflows)) {
   check(JSON.stringify(w.permissions)==='{"contents":"read"}',file+': default token must be read-only');
   check(!w.on?.pull_request_target,file+': pull_request_target is forbidden');
+  const referenced=[...JSON.stringify(w.jobs).matchAll(/secrets\.([A-Z_]+)/g)].map(m=>m[1]);
+  for(const key of referenced)check(Object.hasOwn(w.on?.workflow_call?.secrets||{},key),file+': environment secret requires explicit reusable contract: '+key);
+  check(file!=='ci.yml'||!w.on?.workflow_call?.secrets,file+': CI cannot declare release secrets');
   for(const [name,j] of Object.entries(w.jobs||{})) {
    const label=file+'/'+name, body=JSON.stringify(j), scripts=(j.steps||[]).map(s=>s.run||'').join('\n');
    if(j.uses){check(j.uses===slsa || /^\$\/\.github\/workflows\/\w[\w-]*\.yml$/.test(j.uses),label+': reusable workflow must use pinned platform or generator exception');continue;}

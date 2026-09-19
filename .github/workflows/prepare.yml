@@ -15,6 +15,13 @@ on:
       sha256:
         description: Candidate archive SHA256
         value: ${{ jobs.verify.outputs.sha256 }}
+    secrets:
+      MATCH_PASSWORD:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
+      MATCH_SSH_PRIVATE_KEY:
+        description: Resolved from the job protected environment; bind the same name in the caller.
+        required: false
 permissions: &a2
   contents: read
 jobs:
@@ -111,6 +118,11 @@ jobs:
           fetch-depth: 1
           ref: ${{ needs.version.outputs.source_sha }}
       - *a1
+      - name: Require signing environment credentials
+        run: test -n "$MATCH_PASSWORD" && test -n "$MATCH_SSH_PRIVATE_KEY"
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_SSH_PRIVATE_KEY: ${{ secrets.MATCH_SSH_PRIVATE_KEY }}
       - name: Validate exact toolchain
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/toolchain.py"
       - name: Install locked platform gems
