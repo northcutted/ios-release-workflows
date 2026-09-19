@@ -46,6 +46,10 @@ jobs:
           IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff
           IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS='["ffffffffffffffffffffffffffffffffffffffff"]'
           npm run test:ci
+      - name: Install platform-appropriate SLSA verifier
+        uses: $/actions/slsa-verifier
+      - name: Exercise installed verifier
+        run: slsa-verifier version
       - name: Install pinned workflow validator
         if: runner.os == 'Linux'
         run: bash scripts/ci/install_actionlint.sh

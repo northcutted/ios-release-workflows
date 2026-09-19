@@ -372,7 +372,7 @@ jobs:
           name: ${{ needs.provenance.outputs.provenance-name }}
           path: release-assets
       - name: Install SLSA verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6
+        uses: $/actions/slsa-verifier
       - name: Verify isolated provenance and every release asset
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/verify_release.py" release-assets --source "$SOURCE_SHA"
         env:
