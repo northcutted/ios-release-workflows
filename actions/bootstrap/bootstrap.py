@@ -27,6 +27,9 @@ assert isinstance(approved, list) and len(approved) <= 20 and all(
     isinstance(value, str) and re.fullmatch(r'[a-f0-9]{40}', value) for value in approved
 ), 'Trusted producer revisions must be explicit full commits'
 values['IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS'] = json.dumps(sorted(set([revision] + approved)))
+controls = CONFIG.get('github_controls', {})
+assert isinstance(controls, dict), 'Repository control policy must be an object'
+values['IOS_RELEASE_CONTROL_POLICY'] = json.dumps(controls, sort_keys=True)
 with open(os.environ['GITHUB_ENV'], 'a') as out:
     for key, value in values.items():
         assert '\n' not in value and '\r' not in value

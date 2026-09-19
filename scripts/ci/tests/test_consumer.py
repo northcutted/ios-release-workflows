@@ -59,6 +59,7 @@ class ConsumerContractTests(unittest.TestCase):
             root=Path(directory); config=root/'app.json'; output=root/'environment'
             raw=json.loads((ROOT/'examples/minimal.json').read_text())
             raw['trusted_producer_revisions']=['b'*40]
+            raw['github_controls']={'publisher_app_id': 123}
             config.write_text(json.dumps(raw))
             env={**os.environ, 'GITHUB_WORKSPACE': directory, 'CONFIG_PATH': 'app.json',
                  'PLATFORM_REVISION': 'f'*40, 'RUNNER_TEMP': directory, 'GITHUB_ENV': str(output),
@@ -66,6 +67,7 @@ class ConsumerContractTests(unittest.TestCase):
             subprocess.run([sys.executable, str(ROOT/'actions/bootstrap/bootstrap.py')], env=env, check=True)
             values=dict(line.split('=', 1) for line in output.read_text().splitlines())
             self.assertEqual(json.loads(values['IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS']), ['b'*40, 'f'*40])
+            self.assertEqual(json.loads(values['IOS_RELEASE_CONTROL_POLICY']), {'publisher_app_id': 123})
             raw['trusted_producer_revisions']=['c'*40]; config.write_text(json.dumps(raw))
             with patch.dict(os.environ, values):
                 self.assertEqual(evidence.trusted_revision('b'*40), 'b'*40)
