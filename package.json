@@ -12,7 +12,7 @@
   },
   "scripts": {
     "check:workflows": "node scripts/ci/workflow_policy.mjs && node scripts/ci/lint_workflows.mjs",
-    "test:ci": "node --test scripts/ci/tests/*.test.mjs && python3 -m unittest discover -s scripts/ci/tests -p \"test_*.py\" && bundle exec ruby scripts/ci/tests/release_guard_test.rb && bundle exec ruby scripts/ci/tests/release_operations_test.rb && bundle exec ruby scripts/ci/tests/fastlane_contract_test.rb"
+    "test:ci": "node --test scripts/ci/tests/*.test.mjs && python3 -m unittest discover -s scripts/ci/tests -p \"test_*.py\" && bundle exec ruby scripts/ci/tests/release_guard_test.rb && bundle exec ruby scripts/ci/tests/release_operations_test.rb && bundle exec ruby scripts/ci/tests/fastlane_contract_test.rb && bundle exec ruby scripts/ci/tests/accessibility_contract_test.rb"
   },
   "overrides": {
     "@semantic-release/release-notes-generator": {

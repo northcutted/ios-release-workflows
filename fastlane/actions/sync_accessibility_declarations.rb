@@ -37,12 +37,19 @@ module Fastlane
           current = existing_for_device(existing, device_family)
 
           if current
-            result = update_declaration(token, current.fetch("id"), attributes)
-            UI.success("Updated #{device_family} accessibility declaration") if result
+            declaration_id = current.fetch("id")
+            unless attributes.all? { |key, value| current.fetch("attributes")[key] == value }
+              UI.user_error!("Accessibility declaration must be a draft before changing features") unless current.dig("attributes", "state") == "DRAFT"
+              update_declaration(token, declaration_id, attributes)
+            end
           else
-            result = create_declaration(token, app_id, attributes)
-            UI.success("Created #{device_family} accessibility declaration") if result
+            declaration_id = create_declaration(token, app_id, attributes).fetch("data").fetch("id")
           end
+          readback = request(token, :get, "/v1/accessibilityDeclarations/#{declaration_id}").fetch("data").fetch("attributes")
+          unless %w[DRAFT PUBLISHED].include?(readback["state"]) && attributes.all? { |key, value| readback[key] == value }
+            UI.user_error!("Accessibility declaration readback mismatch for #{device_family}")
+          end
+          UI.success("Verified #{device_family} accessibility declaration")
         end
       end
 
@@ -131,7 +138,8 @@ module Fastlane
             data: {
               type: "accessibilityDeclarations",
               id: declaration_id,
-              attributes: attributes
+              # deviceFamily is immutable and only accepted on POST.
+              attributes: attributes.select { |key, _value| FEATURE_KEYS.include?(key) }
             }
           }
         )
