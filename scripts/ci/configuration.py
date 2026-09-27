@@ -40,6 +40,14 @@ def load(path=None):
     require(data.get("qa_checks") == ["lint", "localization", "analyze", "test", "test-compatibility"], "Incomplete QA contract")
     require(data.get("runtime_dependencies") is not None, "Declare runtime dependencies, including an explicit empty list")
     require(data["source_workflow"] == ".github/workflows/main.yml", "v1 prepare entrypoint must be main.yml")
+    replacement = data.get("replacement_release")
+    if replacement is not None:
+        require(isinstance(replacement, dict) and set(replacement) == {"version", "source_tag", "build_number", "app_store_build_id"}, "Declare the exact release and Apple build being replaced")
+        version = replacement.get("version", "")
+        require(isinstance(version, str) and re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version), "Invalid replacement version")
+        require(replacement.get("source_tag") == "v" + version, "Replacement must name the original stable release tag")
+        require(isinstance(replacement.get("build_number"), str) and re.fullmatch(r"[1-9]\d{0,3}\.[1-9]\d?", replacement["build_number"]), "Invalid previous build number")
+        require(isinstance(replacement.get("app_store_build_id"), str) and re.fullmatch(r"[A-Za-z0-9-]{1,80}", replacement["app_store_build_id"]), "Invalid previous Apple build ID")
     return data
 
 CONFIG = load()

@@ -45,3 +45,24 @@ test('a reverted change alone does not create a release', async t => {
   commit(`Revert "feat: temporary feature"\n\nThis reverts commit ${hash}.`);
   assert.equal((await analyze(cwd)).will_release, false);
 });
+
+test('replacement keeps the highest released marketing version without moving its tag', async t => {
+  const {cwd, git, commit} = repository(t);
+  commit('feat: revise privacy review');
+  fs.writeFileSync(path.join(cwd, 'replacement.json'), JSON.stringify({replacement_release: {version: '1.6.5', source_tag: 'v1.6.5'}}));
+  const before = git('rev-parse', 'v1.6.5');
+  const result = await analyze(cwd, 'replacement.json');
+  assert.equal(result.version, '1.6.5');
+  assert.equal(result.replacement_for, 'v1.6.5');
+  assert.equal(result.git_tag, null, 'The build job adds its exact build number later');
+  assert.equal(result.will_release, true);
+  assert.equal(git('rev-parse', 'v1.6.5'), before);
+  assert.equal(git('tag'), 'v1.6.5');
+});
+test('replacement refuses missing, older, mismatched, or prerelease version tags', async t => {
+  const {cwd} = repository(t);
+  for (const [version, source_tag] of [['1.5.0', 'v1.5.0'], ['1.7.0', 'v1.7.0'], ['1.6.5', 'v1.5.0'], ['1.6.5-beta.1', 'v1.6.5-beta.1']]) {
+    fs.writeFileSync(path.join(cwd, 'replacement.json'), JSON.stringify({replacement_release: {version, source_tag}}));
+    await assert.rejects(analyze(cwd, 'replacement.json'), /highest reachable stable release/);
+  }
+});

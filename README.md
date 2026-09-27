@@ -42,7 +42,7 @@ GitHub loads a release-event caller from the original app tag. When promotion ru
 
 The Build Uploads adapter reserves an Apple upload/file, transfers bounded byte ranges, commits SHA256, and binds Apple's processed build through the upload relationship. Failed attempts retain operation receipts. Rerun failed jobs in the **same promotion run** to recover prior successful transfer receipts. Existing uploads are reused only with a matching SHA256 or that run's verified successful Transporter receipt. Every successful canary also emits a signed final handoff artifact. To publish it later, supply the original candidate ID/digest plus that exact processed artifact ID/digest; the platform authenticates both, reads back the recorded Apple build, and performs no transfer. An ambiguous legacy upload without proof is rejected. Conflicting immutable releases are never replaced.
 
-Staging explicitly attaches the processed build and rejects replacement of an already selected different build. Production approval precedes an explicit release-policy update and readback. Submission preserves permitted metadata edits, resumes only matching review items, and records success only after Apple's submitted state is visible. Receipts are separately attested workflow artifacts with 90-day retention; they do not mutate immutable releases and omit review credentials/contact details.
+Staging explicitly attaches the processed build and rejects replacement of an already selected different build unless an exact reviewed replacement is configured as described below. Production approval precedes an explicit release-policy update and readback. Submission preserves permitted metadata edits, resumes only matching review items, and records success only after Apple's submitted state is visible. Receipts are separately attested workflow artifacts with 90-day retention; they do not mutate immutable releases and omit review credentials/contact details.
 
 Metadata-only updates require an exact commit reachable from protected main. The operation records each consumed text file's hash and uses the same production submission gate. The observer changes no Apple state. Apple review outcomes, agreements/account setup, and owner-supplied compliance facts remain explicit responsibilities; the platform does not invent them.
 
@@ -89,3 +89,23 @@ GitHub can redact a private Integration node itself as `[null]` even for that Ap
 ## Verifier installation
 
 `actions/slsa-verifier` keeps the upstream installer on supported Linux x64 runners. Its [upstream installer is Linux-only](https://github.com/slsa-framework/slsa-verifier/blob/v2.7.1/actions/installer/README.md). On macOS arm64/x64, the platform downloads official v2.7.1 assets using reviewed SHA256 pins for both the executable and provenance. Both hashes must pass before execution; the pinned bootstrap then verifies the expected upstream source/tag before entering PATH. The macOS assets were independently provenance-verified before pinning. Unsupported platforms fail explicitly, and platform CI exercises actual installation on Linux and macOS. This does not remove IPA provenance verification from the upload job.
+
+
+## Replace a prepared App Store build without rewriting an immutable release
+
+For a version still in `PREPARE_FOR_SUBMISSION`, review an optional consumer configuration entry:
+
+```json
+"replacement_release": {
+  "version": "1.7.0",
+  "source_tag": "v1.7.0",
+  "build_number": "77.1",
+  "app_store_build_id": "EXACT-PREVIOUS-APPLE-BUILD-ID"
+}
+```
+
+The source tag must be the highest reachable stable release. Preparation retains that marketing version and assigns the new candidate a unique `v1.7.0-build-N.ATTEMPT` tag, bound to the exact new build number, source and configuration in its signed manifests. The previous tag, release and artifacts stay immutable. The new build number must exceed the declared old build. Remove the entry by PR when normal semantic versioning should resume.
+
+Promotion still needs the exact candidate ID/digest, main ancestry, complete QA, signatures, provenance and protected environments. It does not upload automatically. Staging may replace only the declared Apple build ID and number for the same version, while that version is still `PREPARE_FOR_SUBMISSION` and no active review submission exists. A different selection or state fails before the relationship write. The previous selection is recorded and the new selection is read back; retries do not reselect a build that is already attached. Production approval and submission remain separate.
+
+This supports an intentional replacement of an unsubmitted draft. It cannot roll back an approved App Store version, cancel a review, move an immutable tag, or bypass a release approval. Old manifests and stable release tags remain verifiable.

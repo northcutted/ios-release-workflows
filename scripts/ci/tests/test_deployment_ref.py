@@ -22,6 +22,14 @@ class DeploymentRefTests(unittest.TestCase):
         for status in ('behind', 'diverged'):
             with self.assertRaises(ValueError): verify_ref('v1.7.0', ref, sha, 'create', lambda _: {'status': status})
 
+    def test_replacement_tag_and_recovery_preserve_exact_build(self):
+        tag = "v1.7.0-build-100.1"; sha = "a" * 40
+        read = lambda _: {"status": "ahead"}
+        self.assertEqual(tag, verify_ref(tag, "refs/tags/" + tag, sha, "release", read))
+        self.assertEqual(tag, verify_ref(tag, f"refs/tags/{tag}-deploy-{sha}", sha, "create", read))
+        for wrong in ("v1.7.0-build-101.1", "v1.7.0", "v1.7.0-build-0.1"):
+            with self.assertRaises(ValueError): verify_ref(wrong, "refs/tags/" + tag, sha, "release", read)
+
     def test_recovery_tag_requires_immutable_publication_and_never_moves_existing_tag(self):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory)/'release-manifest.json').write_text(json.dumps({'tag': 'v1.7.0', 'source_sha': 'b'*40}))

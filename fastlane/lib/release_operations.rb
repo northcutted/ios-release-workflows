@@ -41,8 +41,21 @@ class ReleaseOperations < ReleaseGuard
     raise "Processed build identity changed" unless build && build["id"] == @manifest.fetch("app_store_build_id") && build.dig("attributes", "processingState") == "VALID"
     v = version
     selected = get("/v1/appStoreVersions/#{v.fetch('id')}/build")["data"]
-    raise "Refusing to replace a different selected build" if selected && selected["id"] != build["id"]
-    unless selected
+    if selected && selected["id"] != build["id"]
+      replacement = @config["replacement_release"]
+      state = v.dig("attributes", "appVersionState") || v.dig("attributes", "appStoreState")
+      allowed = replacement && replacement["version"] == @manifest["version"] &&
+        replacement["source_tag"] == @manifest["replacement_for"] &&
+        @manifest["tag"] == "v#{@manifest['version']}-build-#{@manifest['build_number']}" &&
+        replacement["app_store_build_id"] == selected["id"] &&
+        replacement["build_number"] == selected.dig("attributes", "version") && state == "PREPARE_FOR_SUBMISSION"
+      raise "Refusing to replace a different selected build" unless allowed
+      active = list("/v1/apps/#{app_id}/reviewSubmissions", "filter[platform]" => "IOS")
+        .reject { |submission| %w[COMPLETE CANCELED].include?(submission.dig("attributes", "state")) }
+      raise "Cannot replace a build while a review submission is active" unless active.empty?
+      checkpoint("replaced_app_store_build_id" => selected["id"], "replaced_build_number" => replacement["build_number"])
+    end
+    if !selected || selected["id"] != build["id"]
       mutate("PATCH", "/v1/appStoreVersions/#{v.fetch('id')}/relationships/build", {"data" => {"type" => "builds", "id" => build.fetch("id")}})
     end
     verify_selected_build!

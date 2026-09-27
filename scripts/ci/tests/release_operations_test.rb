@@ -82,6 +82,43 @@ class ReleaseOperationsTest < Minitest::Test
     @selected=build.merge('id'=>'foreign')
     assert_raises(RuntimeError){@guard.select_build!}; assert_empty @writes
   end
+  def authorize_replacement
+    @config['replacement_release']={'version'=>'1.7.0','source_tag'=>'v1.7.0','build_number'=>'77.1','app_store_build_id'=>'previous'}
+    @manifest.merge!('tag'=>'v1.7.0-build-100.1','replacement_for'=>'v1.7.0')
+    @selected=build.merge('id'=>'previous', 'attributes'=>build['attributes'].merge('version'=>'77.1'))
+  end
+  def test_reviewed_replacement_changes_only_the_exact_previous_build_and_is_idempotent
+    authorize_replacement
+    @guard.select_build!
+    assert_equal 'verified',@selected['id']
+    assert_equal 1,@writes.length
+    receipt=JSON.parse(File.read(File.join(@directory,'receipt.json')))
+    assert_equal 'previous',receipt['replaced_app_store_build_id']
+    assert_equal '77.1',receipt['replaced_build_number']
+    @guard.select_build!
+    assert_equal 1,@writes.length
+  end
+  def test_replacement_rejects_changed_selection_version_number_or_review_state
+    [[:id,'foreign'],[:number,'78.1'],[:state,'WAITING_FOR_REVIEW'],[:version,'1.8.0'],[:tag,'v1.7.0']].each do |field,value|
+      authorize_replacement
+      @state='PREPARE_FOR_SUBMISSION'
+      case field
+      when :id then @selected['id']=value
+      when :number then @selected['attributes']['version']=value
+      when :state then @state=value
+      when :version then @config['replacement_release']['version']=value
+      when :tag then @manifest['tag']=value
+      end
+      assert_raises(RuntimeError){@guard.select_build!}
+      assert_empty @writes
+    end
+  end
+  def test_replacement_rejects_active_review_submission_before_writing
+    authorize_replacement
+    @submission={'id'=>'submission','attributes'=>{'state'=>'READY_FOR_REVIEW'}}
+    assert_raises(RuntimeError){@guard.select_build!}
+    assert_empty @writes
+  end
   def test_automatic_and_phased_policy_is_applied_with_readback
     @selected=build; production{@guard.submit!(timeout:0,interval:0)}
     assert_equal 'AFTER_APPROVAL', @release_type

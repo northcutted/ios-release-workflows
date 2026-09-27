@@ -56,7 +56,11 @@ def identity(data):
     require(data.get("source_ref") == "refs/heads/main", "Release source must be main")
     require(re.fullmatch(r"[0-9a-f]{40}", data.get("source_sha", "")), "Invalid source SHA")
     require(re.fullmatch(r"\d+\.\d+\.\d+", data.get("version", "")), "Invalid marketing version")
-    require(data.get("tag") == "v" + data["version"], "Tag/version mismatch")
+    stable_tag = "v" + data["version"]
+    replacement = data.get("replacement_for")
+    require(replacement is None or replacement == stable_tag, "Wrong replacement release identity")
+    expected_tag = f"{stable_tag}-build-{data.get('build_number')}" if replacement else stable_tag
+    require(data.get("tag") == expected_tag, "Tag/version/build mismatch")
     require(re.fullmatch(r"[1-9]\d{0,3}\.[1-9]\d?", data.get("build_number", "")), "Invalid build number")
     require(all(re.fullmatch(r"[1-9]\d*", str(data.get(k, ""))) for k in ("run_id", "run_attempt")), "Missing run identity")
 
@@ -76,6 +80,12 @@ def context():
             "source_sha": os.environ["SOURCE_SHA"], "version": os.environ["VERSION"],
             "tag": "v" + os.environ["VERSION"], "build_number": os.environ["BUILD_NUMBER"],
             "run_id": os.environ["RELEASE_RUN_ID"], "run_attempt": os.environ["RELEASE_RUN_ATTEMPT"]}
+    replacement = CONFIG.get("replacement_release")
+    if replacement:
+        require(data["version"] == replacement["version"], "Replacement version differs from configuration")
+        require(tuple(map(int, data["build_number"].split('.'))) > tuple(map(int, replacement["build_number"].split('.'))), "Replacement build must be newer")
+        data["replacement_for"] = replacement["source_tag"]
+        data["tag"] = f"v{data['version']}-build-{data['build_number']}"
     data.update(app={"bundle_id": CONFIG["app_store"]["bundle_id"], "team_id": CONFIG["team_id"]},
                 producer={"repository": PRODUCER, "workflow": ".github/workflows/prepare.yml", "revision": os.environ["IOS_RELEASE_REVISION"]},
                 config_sha256=digest(os.environ["IOS_RELEASE_CONFIG"]))
@@ -106,6 +116,11 @@ def validate_manifest(root, filename, source=None, tag=None, final=False, consum
     names = verify_assets(root, data["artifacts"], consumed)
     require(REQUIRED <= names, f"Missing release assets: {sorted(REQUIRED - names)}")
     require(data["config_sha256"] == digest(Path(root) / "app-config.json"), "Configuration digest mismatch")
+    app_config = read(Path(root) / "app-config.json")
+    replacement = app_config.get("replacement_release")
+    require(data.get("replacement_for") == (replacement.get("source_tag") if replacement else None), "Replacement/configuration mismatch")
+    if replacement:
+        require(data["version"] == replacement["version"], "Replacement marketing version mismatch")
     require(data["candidate_id"] == f"{data['repository']}:{data['run_id']}:{data['run_attempt']}:{data['ipa_sha256']}", "Candidate identity mismatch")
     ipa = next(x for x in data["artifacts"] if x["name"] == "application.ipa")
     require(data.get("ipa_sha256") == ipa["sha256"], "IPA identity mismatch")
@@ -114,8 +129,8 @@ def validate_manifest(root, filename, source=None, tag=None, final=False, consum
         require({"release-build-manifest.json", "testflight-status.json", "provenance.intoto.jsonl"} <= names,
                 "Missing build provenance or upload receipt")
         original = validate_manifest(root, "release-build-manifest.json", source=data["source_sha"], consumed=consumed)
-        for key in ("source_sha", "version", "build_number", "run_id", "run_attempt", "ipa_sha256"):
-            require(data[key] == original[key], f"Build/final manifest mismatch: {key}")
+        for key in ("source_sha", "version", "build_number", "tag", "replacement_for", "run_id", "run_attempt", "ipa_sha256"):
+            require(data.get(key) == original.get(key), f"Build/final manifest mismatch: {key}")
         status = read(Path(root) / "testflight-status.json")
         validate_status(status, data)
         require(data.get("app_store_build_id") == status["app_store_build_id"], "App Store build identity mismatch")

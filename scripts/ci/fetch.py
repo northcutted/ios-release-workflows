@@ -108,7 +108,7 @@ def processed(artifact_id, expected_digest, full=False):
 
 
 def release(tag, mode="deploy", emit=True):
-    require(re.fullmatch(r'v\d+\.\d+\.\d+', tag), 'Invalid release tag')
+    require(re.fullmatch(r'v\d+\.\d+\.\d+(?:-build-[1-9]\d{0,3}\.[1-9]\d?)?', tag), 'Invalid release tag')
     release = api(f"repos/{CONFIG['repository']}/releases/tags/{tag}")
     require(release.get('immutable') is True and not release['draft'] and not release['prerelease'], 'Expected published immutable release')
     Path('release-assets').mkdir(exist_ok=True)

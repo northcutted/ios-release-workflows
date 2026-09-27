@@ -132,6 +132,27 @@ class EvidenceTests(unittest.TestCase):
             e.build(self.root)
         return e.read(self.root / "release-build-manifest.json")
 
+    def test_replacement_manifest_binds_marketing_version_build_tag_and_config(self):
+        replacement = {"version": "1.7.0", "source_tag": "v1.7.0", "build_number": "77.1", "app_store_build_id": "previous-build"}
+        with tempfile.TemporaryDirectory() as directory:
+            config = json.loads(Path(os.environ["IOS_RELEASE_CONFIG"]).read_text())
+            config["replacement_release"] = replacement
+            path = Path(directory) / "config.json"; path.write_text(json.dumps(config))
+            with patch.dict(e.CONFIG, {"replacement_release": replacement}), patch.dict(os.environ, {"IOS_RELEASE_CONFIG": str(path)}):
+                manifest = self.build_fixture()
+                self.assertEqual("1.7.0", manifest["version"])
+                self.assertEqual("v1.7.0-build-100.1", manifest["tag"])
+                self.assertEqual("v1.7.0", manifest["replacement_for"])
+                e.validate_manifest(self.root, "release-build-manifest.json")
+                for change in ({"tag": "v1.7.0"}, {"tag": "v1.7.0-build-101.1"}, {"replacement_for": "v1.6.5"}):
+                    with self.assertRaises(ValueError): e.identity({**manifest, **change})
+                receipt = {**{key: manifest[key] for key in ("version", "build_number", "source_sha", "ipa_sha256")},
+                           "app_store_build_id": "verified-build", "processing_state": "VALID"}
+                e.write(self.root / "testflight-status.json", receipt)
+                (self.root / "provenance.intoto.jsonl").write_text("fixture signed separately")
+                e.finalize(self.root)
+                e.validate_manifest(self.root, "release-manifest.json", tag=manifest["tag"], final=True)
+
     def test_final_manifest_round_trip_and_substitution(self):
         manifest = self.build_fixture()
         receipt = {**{k: manifest[k] for k in ("version", "build_number", "source_sha", "ipa_sha256")},
