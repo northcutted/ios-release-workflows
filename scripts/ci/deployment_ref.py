@@ -11,7 +11,7 @@ from publish_release import gh, tag_commit
 
 
 def verify_ref(release_tag, ref, source, event, read=api):
-    require(re.fullmatch(r'v\d+\.\d+\.\d+', release_tag or ''), 'Invalid immutable release tag')
+    require(re.fullmatch(r'v\d+\.\d+\.\d+(?:-build-[1-9]\d{0,3}\.[1-9]\d?)?', release_tag or ''), 'Invalid immutable release tag')
     if ref == 'refs/tags/' + release_tag:
         return release_tag
     require(re.fullmatch(r'[a-f0-9]{40}', source or ''), 'Invalid deployment source')
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     else:
         tag = os.getenv('RELEASE_TAG')
         if not tag:
-            match = re.fullmatch(r'refs/tags/(v\d+\.\d+\.\d+)-deploy-[a-f0-9]{40}', os.environ['GITHUB_REF'])
+            match = re.fullmatch(r'refs/tags/(v\d+\.\d+\.\d+(?:-build-[1-9]\d{0,3}\.[1-9]\d?)?)-deploy-[a-f0-9]{40}', os.environ['GITHUB_REF'])
             require(match, 'Unexpected deployment event')
             tag = match[1]
         verify_ref(tag, os.environ['GITHUB_REF'], os.environ['GITHUB_SHA'], os.environ['GITHUB_EVENT_NAME'])

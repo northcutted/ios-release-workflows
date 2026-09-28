@@ -8,7 +8,7 @@ import {analyzeCommits} from '@semantic-release/commit-analyzer';
 import {generateNotes} from '@semantic-release/release-notes-generator';
 import semver from 'semver';
 
-export async function analyze(cwd = process.cwd()) {
+export async function analyze(cwd = process.cwd(), configFile = process.env.IOS_RELEASE_CONFIG || '.github/ios-release.json') {
   const git = (...args) => execFileSync('git', args, {cwd, encoding: 'utf8'}).trim();
   const config = JSON.parse(fs.readFileSync(path.join(cwd, '.releaserc.json')));
   const source = git('rev-parse', 'HEAD');
@@ -26,9 +26,20 @@ export async function analyze(cwd = process.cwd()) {
   const options = name => config.plugins.find(plugin => plugin[0] === name)?.[1] ?? {};
   const type = await analyzeCommits(options('@semantic-release/commit-analyzer'), context);
   const version = type ? (tag ? semver.inc(previous.version, type) : '1.0.0') : (previous.version || '1.0.0');
-  const nextRelease = {version, gitTag: `v${version}`, gitHead: source};
+  const configPath = path.resolve(cwd, configFile);
+  const app = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath)) : {};
+  const replacement = app.replacement_release;
+  if (replacement && (!semver.valid(replacement.version) || replacement.version !== semver.clean(replacement.version)
+      || !/^\d+\.\d+\.\d+$/.test(replacement.version)
+      || replacement.source_tag !== `v${replacement.version}` || tag !== replacement.source_tag)) {
+    throw new Error('Replacement must target the highest reachable stable release');
+  }
+  const candidateVersion = replacement?.version || version;
+  const nextRelease = {version: candidateVersion, gitTag: replacement ? source : `v${version}`, gitHead: source};
   const notes = type ? await generateNotes(options('@semantic-release/release-notes-generator'), {...context, nextRelease}) : 'Verification build; no release changes.';
-  return {will_release: Boolean(type), version, git_tag: `v${version}`, source_sha: source, notes};
+  return {will_release: Boolean(type) || Boolean(replacement), version: candidateVersion,
+    git_tag: replacement ? null : `v${version}`, replacement_for: replacement?.source_tag || null,
+    source_sha: source, notes};
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
