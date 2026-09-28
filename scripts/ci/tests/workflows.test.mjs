@@ -6,3 +6,12 @@ test('alternate submission, PR secrets, mutable actions and compilation OIDC fai
 });
 
 test('environment secret declarations cannot silently disappear',()=>{const w=loadWorkflows();delete w['prepare.yml'].on.workflow_call.secrets.MATCH_SSH_PRIVATE_KEY;assert.match(validate(w).join('\n'),/explicit reusable contract/);});
+test('release controller cannot bypass selection or choose a mutable artifact',()=>{
+ const w=loadWorkflows();w['release.yml'].jobs.promote.needs=[];
+ w['release.yml'].jobs.promote.with.artifact_id='latest';
+ w['release.yml'].jobs.promote.with.upload_adapter='transporter';
+ w['release.yml'].jobs.resolve.environment='testflight';
+ const errors=validate(w).join('\n');
+ assert.match(errors,/verified selection/);assert.match(errors,/frozen verified artifact/);
+ assert.match(errors,/read-only and secret-free/);assert.match(errors,/verified candidate configuration/);
+});

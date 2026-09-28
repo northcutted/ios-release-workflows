@@ -1,0 +1,178 @@
+name: Release selected build
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        default: .github/ios-release.json
+      platform_revision:
+        type: string
+        required: true
+      action:
+        type: string
+        required: true
+      source:
+        type: string
+        required: true
+      metadata_commit:
+        type: string
+        default: ""
+    secrets:
+      APP_STORE_CONNECT_API_KEY_ID:
+        required: false
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID:
+        required: false
+      APP_STORE_CONNECT_API_KEY_CONTENT:
+        required: false
+      RELEASE_APP_ID:
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        required: false
+permissions:
+  contents: read
+jobs:
+  resolve:
+    name: Verify selected release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    outputs:
+      kind: ${{ steps.selection.outputs.kind }}
+      operation: ${{ steps.selection.outputs.operation }}
+      artifact_id: ${{ steps.selection.outputs.artifact_id }}
+      sha256: ${{ steps.selection.outputs.sha256 }}
+      processed_artifact_id: ${{ steps.selection.outputs.processed_artifact_id }}
+      processed_sha256: ${{ steps.selection.outputs.processed_sha256 }}
+      upload_adapter: ${{ steps.selection.outputs.upload_adapter }}
+      release_tag: ${{ steps.selection.outputs.release_tag }}
+      metadata_commit: ${{ steps.selection.outputs.metadata_commit }}
+      resume_source: ${{ steps.selection.outputs.resume_source }}
+    steps:
+      - name: Checkout protected policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - name: Install pinned verifier
+        uses: $/actions/slsa-verifier
+      - name: Resolve and authenticate the selected build
+        id: selection
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/resolve_release.py"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_SOURCE: ${{ inputs.source }}
+          METADATA_COMMIT: ${{ inputs.metadata_commit }}
+          RELEASE_DISTRIBUTION_ENABLED: ${{ vars.RELEASE_DISTRIBUTION_ENABLED }}
+          TESTFLIGHT_CANARY_ENABLED: ${{ vars.TESTFLIGHT_CANARY_ENABLED }}
+      - name: Retain the exact selection
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/release-selection.json
+          retention-days: 90
+          if-no-files-found: error
+  promote:
+    name: Upload or reuse verified build
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'candidate'
+    uses: $/.github/workflows/promote.yml
+    with:
+      config: ${{ inputs.config }}
+      platform_revision: ${{ inputs.platform_revision }}
+      artifact_id: ${{ needs.resolve.outputs.artifact_id }}
+      sha256: ${{ needs.resolve.outputs.sha256 }}
+      processed_artifact_id: ${{ needs.resolve.outputs.processed_artifact_id }}
+      processed_sha256: ${{ needs.resolve.outputs.processed_sha256 }}
+      upload_adapter: ${{ needs.resolve.outputs.upload_adapter }}
+      publish: ${{ needs.resolve.outputs.operation == 'app-store' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    secrets:
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+  deploy-existing:
+    name: Request protected store deployment
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'published'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release-publishing
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    steps:
+      - name: Checkout protected policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Load pinned platform tools
+        uses: $/actions/bootstrap
+        with:
+          config: ${{ inputs.config }}
+          revision: ${{ inputs.platform_revision }}
+      - name: Install pinned verifier
+        uses: $/actions/slsa-verifier
+      - name: Authenticate immutable release again
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/fetch.py" release --mode observe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      - name: Mint protected tag publisher token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        id: publisher
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-administration: read
+          repositories: ${{ github.event.repository.name }}
+      - name: Verify unchanged repository controls
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/preflight.py"
+        env:
+          GH_TOKEN: ${{ steps.publisher.outputs.token }}
+      - name: Start deployment from an immutable operation tag
+        run: python3 "$IOS_RELEASE_ROOT/scripts/ci/deployment_ref.py" request
+        env:
+          GH_TOKEN: ${{ steps.publisher.outputs.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          METADATA_COMMIT: ${{ needs.resolve.outputs.metadata_commit }}
+          REQUEST_SUBMISSION: ${{ needs.resolve.outputs.operation != 'metadata' }}
+  summary:
+    name: Release next step
+    needs: [resolve, promote, deploy-existing]
+    if: always() && needs.resolve.result == 'success' && (needs.promote.result == 'success' || needs.deploy-existing.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Show the next release action
+        run: |
+          python3 - <<'PY'
+          import os
+          url = os.environ['RESUME_SOURCE'] or f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              if os.environ['OPERATION'] == 'testflight':
+                  out.write('TestFlight processing completed. After device acceptance, run **Release**, choose **Prepare App Store submission**, and use this run URL as Source:\n\n' + url + '\n')
+              else:
+                  out.write('The exact build has been handed to the protected App Store deployment workflow. Inspect its staging result; production submission still requires approval.\n')
+          PY
+        env:
+          OPERATION: ${{ needs.resolve.outputs.operation }}
+          RESUME_SOURCE: ${{ needs.resolve.outputs.resume_source }}

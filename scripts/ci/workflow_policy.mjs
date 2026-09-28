@@ -35,6 +35,13 @@ export function validate(workflows) {
  check(!prepare.jobs.upload&&!prepare.jobs.publish,'Preparation must not distribute');
  check(workflows['promote.yml'].jobs.upload.needs==='verify','Upload must depend on verification');
  check(workflows['ci.yml'].jobs.gate.if==='always()','CI gate must always report');
+ const release=workflows['release.yml'];
+ check(release.jobs.promote.needs==='resolve' && release.jobs['deploy-existing'].needs==='resolve','Release mutations must depend on verified selection');
+ check(!release.jobs.resolve.environment && !JSON.stringify(release.jobs.resolve).includes('secrets.') && !release.jobs.resolve.permissions['id-token'],'Selection must remain read-only and secret-free');
+ check(release.jobs['deploy-existing'].environment==='release-publishing','Operation tag creation requires the restricted publisher environment');
+ check(release.jobs.promote.with.artifact_id==='${{ needs.resolve.outputs.artifact_id }}' && release.jobs.promote.with.sha256==='${{ needs.resolve.outputs.sha256 }}','Promotion must consume frozen verified artifact identity');
+ check(release.jobs.promote.with.upload_adapter==='${{ needs.resolve.outputs.upload_adapter }}','Upload adapter must come from verified candidate configuration');
+ check(Object.values(release.jobs).every(job=>job.secrets!=='inherit'),'Release secrets must remain explicitly bound');
  return errors;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const errors=validate(loadWorkflows());if(errors.length){console.error(errors.join('\n'));process.exitCode=1;}else console.log('Workflow boundary policy passed.');}
