@@ -130,7 +130,7 @@ export function renderMarkdown(data) {
     table(['Changed path', ...Object.values(data.settings.example_flags)], data.change_examples.map(example =>
       [code(example.path), ...Object.keys(data.settings.example_flags).map(flag => example[flag] ? 'Yes' : '—')])), '',
     ] : []),
-    
+
     ] : []),
     ...(data.commands ? ['## Commands', '', table(['Command', 'Purpose'], Object.entries(data.commands.commands).map(([name, command]) => [code(name), escape(command.description)])), ''] : []),
     '## Workflows', '',
