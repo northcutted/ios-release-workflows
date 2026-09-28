@@ -1,0 +1,865 @@
+{
+  "schema_version": 2,
+  "scope": "Checked-in workflow contracts; excludes live service state and step scripts.",
+  "sources": [
+    ".github/ios-release-docs.json",
+    ".ruby-version",
+    "scripts/cli.py",
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy.yml",
+    ".github/workflows/observe.yml",
+    ".github/workflows/platform-tests.yml",
+    ".github/workflows/prepare.yml",
+    ".github/workflows/promote.yml",
+    ".github/workflows/release.yml"
+  ],
+  "platform": {
+    "repository": "northcutted/ios-release-workflows"
+  },
+  "settings": {
+    "schema_version": 1,
+    "mode": "platform",
+    "repository": "northcutted/ios-release-workflows",
+    "output_dir": "docs",
+    "pages": [
+      "README.md",
+      "docs"
+    ],
+    "navigation": [
+      {
+        "label": "Start here",
+        "path": "README.md"
+      },
+      {
+        "label": "Operations",
+        "path": "docs/operations.md"
+      },
+      {
+        "label": "Architecture",
+        "path": "docs/architecture.md"
+      },
+      {
+        "label": "Maintenance",
+        "path": "docs/maintenance.md"
+      }
+    ]
+  },
+  "configuration": null,
+  "change_examples": [],
+  "commands": {
+    "schema_version": 1,
+    "commands": {
+      "gems-install": {
+        "description": "Install the locked platform Ruby dependencies for local Apple tools"
+      },
+      "archive": {
+        "description": "Archive and export locally using installed signing profiles"
+      },
+      "screenshots-capture": {
+        "description": "Run app-owned screenshot scenarios with platform dependencies"
+      },
+      "qa": {
+        "description": "Run lint, localization, analysis or tests; preserve QA evidence"
+      },
+      "toolchain": {
+        "description": "Validate Xcode and resolve exact simulators"
+      },
+      "screenshots-verify": {
+        "description": "Validate configured screenshot coverage and dimensions"
+      },
+      "screenshots-publish": {
+        "description": "Create the screenshot update PR in its protected workflow"
+      },
+      "deployment-ref": {
+        "description": "Verify a protected deployment or metadata operation tag"
+      },
+      "release-verify": {
+        "description": "Authenticate downloaded release evidence"
+      },
+      "controls-configure": {
+        "description": "Preview repository controls; --apply explicitly changes them"
+      },
+      "controls-capture": {
+        "description": "Capture an owner-verified repository control baseline"
+      },
+      "benchmark": {
+        "description": "Compare workflow job timings"
+      },
+      "install-actionlint": {
+        "description": "Install the pinned workflow validator"
+      },
+      "docs": {
+        "description": "Generate or check deterministic consumer documentation"
+      }
+    }
+  },
+  "workflows": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "name": "iOS CI",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "source": {
+          "type": "string",
+          "required": true
+        },
+        "prefix": {
+          "type": "string",
+          "required": true
+        },
+        "test_workers": {
+          "type": "string",
+          "default": "1"
+        }
+      },
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "lint",
+          "name": "lint",
+          "needs": [],
+          "condition": null,
+          "runner": "macos-26",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "analyze",
+          "name": "analyze",
+          "needs": [],
+          "condition": null,
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 45,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "test",
+          "name": "test",
+          "needs": [],
+          "condition": null,
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 45,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "test-compatibility",
+          "name": "test-compatibility",
+          "needs": [],
+          "condition": null,
+          "runner": "macos-26",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 45,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "evidence",
+          "name": "evidence",
+          "needs": [
+            "lint",
+            "analyze",
+            "test",
+            "test-compatibility"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "gate",
+          "name": "CI Gate",
+          "needs": [
+            "lint",
+            "analyze",
+            "test",
+            "test-compatibility",
+            "evidence"
+          ],
+          "condition": "always()",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/deploy.yml",
+      "name": "Deploy verified release",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "release_tag": {
+          "type": "string",
+          "required": true
+        },
+        "metadata_commit": {
+          "type": "string",
+          "default": ""
+        },
+        "submit": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "secret_names": [
+        "APP_STORE_CONNECT_API_KEY_CONTENT",
+        "APP_STORE_CONNECT_API_KEY_ID",
+        "APP_STORE_CONNECT_API_KEY_ISSUER_ID"
+      ],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "verify",
+          "name": "verify",
+          "needs": [],
+          "condition": "vars.RELEASE_DISTRIBUTION_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/v')",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "stage",
+          "name": "stage",
+          "needs": [
+            "verify"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "app-store-staging",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "review",
+          "name": "review",
+          "needs": [
+            "stage"
+          ],
+          "condition": "inputs.submit",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "production",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "receipt",
+          "name": "receipt",
+          "needs": [
+            "review"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write",
+            "actions": "read"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/observe.yml",
+      "name": "Observe App Store releases",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "secret_names": [
+        "APP_STORE_CONNECT_API_KEY_CONTENT",
+        "APP_STORE_CONNECT_API_KEY_ID",
+        "APP_STORE_CONNECT_API_KEY_ISSUER_ID"
+      ],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "observe",
+          "name": "observe",
+          "needs": [],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "app-store-observe",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/platform-tests.yml",
+      "name": "Platform checks",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "pull_request": {},
+        "workflow_dispatch": {}
+      },
+      "inputs": {},
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "tests",
+          "name": "tests",
+          "needs": [],
+          "condition": null,
+          "runner": "${{ matrix.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/prepare.yml",
+      "name": "Prepare verified candidate",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "secret_names": [
+        "MATCH_PASSWORD",
+        "MATCH_SSH_PRIVATE_KEY"
+      ],
+      "outputs": {
+        "artifact_id": {
+          "description": "Exact candidate artifact ID",
+          "value": "${{ jobs.verify.outputs.artifact_id }}"
+        },
+        "sha256": {
+          "description": "Candidate archive SHA256",
+          "value": "${{ jobs.verify.outputs.sha256 }}"
+        }
+      },
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "version",
+          "name": "Determine candidate without write credentials",
+          "needs": [],
+          "condition": "github.ref == 'refs/heads/main'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "package",
+          "name": "Package source and App Store assets",
+          "needs": [
+            "version"
+          ],
+          "condition": "needs.version.outputs.candidate == 'true'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "build",
+          "name": "Build and sign IPA",
+          "needs": [
+            "version"
+          ],
+          "condition": "needs.version.outputs.candidate == 'true'",
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": "signing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "sbom",
+          "name": "Generate source and runtime SBOMs",
+          "needs": [
+            "version",
+            "build"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "evidence",
+          "name": "Validate and attest build evidence",
+          "needs": [
+            "version",
+            "qa",
+            "build",
+            "package",
+            "sbom"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "provenance",
+          "name": "Isolated SLSA Build L3 provenance",
+          "needs": [
+            "version",
+            "evidence"
+          ],
+          "condition": null,
+          "runner": null,
+          "uses": "slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0",
+          "environment": null,
+          "timeout_minutes": null,
+          "permissions": {
+            "actions": "read",
+            "contents": "write",
+            "id-token": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "verify",
+          "name": "Verify release candidate",
+          "needs": [
+            "version",
+            "provenance",
+            "evidence"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "qa",
+          "name": "Release QA",
+          "needs": [
+            "version"
+          ],
+          "condition": "needs.version.outputs.candidate == 'true'",
+          "runner": null,
+          "uses": "$/.github/workflows/ci.yml",
+          "environment": null,
+          "timeout_minutes": null,
+          "permissions": null,
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/promote.yml",
+      "name": "Promote exact candidate",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "artifact_id": {
+          "type": "string",
+          "required": true
+        },
+        "sha256": {
+          "type": "string",
+          "required": true
+        },
+        "upload_adapter": {
+          "type": "string",
+          "default": "transporter"
+        },
+        "publish": {
+          "type": "boolean",
+          "default": false
+        },
+        "processed_artifact_id": {
+          "type": "string",
+          "default": ""
+        },
+        "processed_sha256": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "secret_names": [
+        "APP_STORE_CONNECT_API_KEY_CONTENT",
+        "APP_STORE_CONNECT_API_KEY_ID",
+        "APP_STORE_CONNECT_API_KEY_ISSUER_ID",
+        "RELEASE_APP_ID",
+        "RELEASE_APP_PRIVATE_KEY"
+      ],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "verify",
+          "name": "verify",
+          "needs": [],
+          "condition": "github.ref == 'refs/heads/main' && (vars.TESTFLIGHT_CANARY_ENABLED == 'true' || vars.RELEASE_DISTRIBUTION_ENABLED == 'true')",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "release-publishing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "upload",
+          "name": "upload",
+          "needs": [
+            "verify"
+          ],
+          "condition": "needs.verify.outputs.already_published != 'true' && inputs.processed_artifact_id == ''",
+          "runner": "${{ inputs.upload_adapter == 'build-uploads' && 'ubuntu-24.04' || 'xcode-27' }}",
+          "uses": null,
+          "environment": "testflight",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "processing",
+          "name": "processing",
+          "needs": [
+            "verify",
+            "upload"
+          ],
+          "condition": "always() && needs.verify.result == 'success' && needs.verify.outputs.already_published != 'true' && (needs.upload.result == 'success' || (needs.upload.result == 'skipped' && inputs.processed_artifact_id != ''))",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "testflight",
+          "timeout_minutes": 70,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "finalize",
+          "name": "finalize",
+          "needs": [
+            "verify",
+            "processing"
+          ],
+          "condition": "always() && needs.verify.result == 'success' && needs.processing.result == 'success' && inputs.processed_artifact_id == ''",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "write",
+            "actions": "read",
+            "id-token": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "publish",
+          "name": "publish",
+          "needs": [
+            "verify",
+            "processing",
+            "finalize"
+          ],
+          "condition": "always() && needs.verify.result == 'success' && inputs.publish && vars.RELEASE_DISTRIBUTION_ENABLED == 'true' && (needs.verify.outputs.already_published == 'true' || (needs.processing.result == 'success' && (needs.finalize.result == 'success' || inputs.processed_artifact_id != '')))",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "release-publishing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "attestations": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "name": "Release selected build",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "action": {
+          "type": "string",
+          "required": true
+        },
+        "source": {
+          "type": "string",
+          "required": true
+        },
+        "metadata_commit": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "secret_names": [
+        "APP_STORE_CONNECT_API_KEY_CONTENT",
+        "APP_STORE_CONNECT_API_KEY_ID",
+        "APP_STORE_CONNECT_API_KEY_ISSUER_ID",
+        "RELEASE_APP_ID",
+        "RELEASE_APP_PRIVATE_KEY"
+      ],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "resolve",
+          "name": "Verify selected release",
+          "needs": [],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read",
+            "attestations": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "promote",
+          "name": "Upload or reuse verified build",
+          "needs": [
+            "resolve"
+          ],
+          "condition": "needs.resolve.outputs.kind == 'candidate'",
+          "runner": null,
+          "uses": "$/.github/workflows/promote.yml",
+          "environment": null,
+          "timeout_minutes": null,
+          "permissions": {
+            "contents": "read",
+            "actions": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": [
+            "APP_STORE_CONNECT_API_KEY_CONTENT",
+            "APP_STORE_CONNECT_API_KEY_ID",
+            "APP_STORE_CONNECT_API_KEY_ISSUER_ID",
+            "RELEASE_APP_ID",
+            "RELEASE_APP_PRIVATE_KEY"
+          ]
+        },
+        {
+          "id": "deploy-existing",
+          "name": "Request protected store deployment",
+          "needs": [
+            "resolve"
+          ],
+          "condition": "needs.resolve.outputs.kind == 'published'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "release-publishing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read",
+            "attestations": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "summary",
+          "name": "Release next step",
+          "needs": [
+            "resolve",
+            "promote",
+            "deploy-existing"
+          ],
+          "condition": "always() && needs.resolve.result == 'success' && (needs.promote.result == 'success' || needs.deploy-existing.result == 'success')",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 5,
+          "permissions": null,
+          "secret_names": []
+        }
+      ]
+    }
+  ]
+}

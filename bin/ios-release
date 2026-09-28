@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Supported platform command interface. Run --help without configuring an app."""
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from cli import main
+
+sys.exit(main())

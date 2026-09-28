@@ -41,6 +41,8 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check generated documentation and links
+        run: npm run check:docs
       - name: Run cross-consumer and release regression tests
         run: env -u GITHUB_REPOSITORY IOS_RELEASE_CONFIG="$PWD/examples/picstrip.json"
           IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff
