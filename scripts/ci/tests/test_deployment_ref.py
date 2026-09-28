@@ -9,9 +9,32 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('IOS_RELEASE_CONFIG', str(Path(__file__).resolve().parents[3] / 'examples/picstrip.json'))
-from deployment_ref import create, verify_ref
+from deployment_ref import create, verify_ref, operation_ref, request
 
 class DeploymentRefTests(unittest.TestCase):
+    def test_operation_tag_binds_metadata_submission_and_reviewed_tool_commit(self):
+        source = 'a' * 40; metadata = 'b' * 40
+        tag = f'v1.7.0-build-86.1-op-123-stage-{metadata}-deploy-{source}'
+        ref = 'refs/tags/' + tag
+        read = lambda _: {'status': 'ahead'}
+        self.assertEqual(operation_ref(ref)['metadata_commit'], metadata)
+        self.assertFalse(operation_ref(ref)['submit'])
+        self.assertEqual(verify_ref('v1.7.0-build-86.1', ref, source, 'create', read), 'v1.7.0-build-86.1')
+        for release, sha, event in [('v1.7.0', source, 'create'), ('v1.7.0-build-86.1', 'c' * 40, 'create'), ('v1.7.0-build-86.1', source, 'pull_request')]:
+            with self.assertRaises(ValueError): verify_ref(release, ref, sha, event, read)
+        with self.assertRaises(ValueError): verify_ref('v1.7.0-build-86.1', ref, source, 'create', lambda _: {'status': 'diverged'})
+
+    def test_retry_reuses_operation_tag_without_duplicate_deployment_event(self):
+        source = 'a' * 40
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'release-manifest.json').write_text(json.dumps({'tag': 'v1.7.0', 'source_sha': 'b' * 40}))
+            read = lambda path: {'status': 'ahead'} if '/compare/' in path else {'immutable': True, 'draft': False}
+            with patch('deployment_ref.subprocess.run', side_effect=[subprocess.CompletedProcess([], 1, '', '404'), subprocess.CompletedProcess([], 0, '{}', '')]), patch('deployment_ref.tag_commit', return_value=source), patch('deployment_ref.gh') as mutate:
+                first = request(directory, source, '123', '', False, read)
+                second = request(directory, source, '123', '', False, read)
+                self.assertEqual(first, second)
+                mutate.assert_called_once()
+
     def test_only_exact_release_or_reviewed_protected_recovery_tag_is_eligible(self):
         sha='a'*40; ref=f'refs/tags/v1.7.0-deploy-{sha}'
         read=lambda _: {'status': 'ahead'}
