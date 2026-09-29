@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "mode": "platform",
+  "repository": "northcutted/ios-release-workflows",
+  "output_dir": "docs",
+  "pages": [
+    "README.md",
+    "docs"
+  ],
+  "navigation": [
+    {
+      "label": "Start here",
+      "path": "README.md"
+    },
+    {
+      "label": "Operations",
+      "path": "docs/operations.md"
+    },
+    {
+      "label": "Architecture",
+      "path": "docs/architecture.md"
+    },
+    {
+      "label": "Maintenance",
+      "path": "docs/maintenance.md"
+    }
+  ]
+}

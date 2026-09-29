@@ -15,3 +15,9 @@ test('release controller cannot bypass selection or choose a mutable artifact',(
  assert.match(errors,/verified selection/);assert.match(errors,/frozen verified artifact/);
  assert.match(errors,/read-only and secret-free/);assert.match(errors,/verified candidate configuration/);
 });
+
+test('native QA cannot gain provenance credentials or reintroduce Fastlane',()=>{
+ const w=loadWorkflows();w['ci.yml'].jobs.test.permissions={'id-token':'write'};
+ w['ci.yml'].jobs.analyze.steps.push({uses:'$/actions/ruby'});
+ const errors=validate(w).join('\n');assert.match(errors,/compilation must not sign/);assert.match(errors,/Native QA must not load/);
+});

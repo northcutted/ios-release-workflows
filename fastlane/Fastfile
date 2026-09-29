@@ -32,19 +32,6 @@ def strict_precheck(api_key)
 end
 
 platform :ios do
-  lane :analyze do
-    xcodebuild(**project_options, configuration: "Debug", sdk: "iphonesimulator",
-      destination: ENV.fetch("TEST_DESTINATION"), xcargs: "CODE_SIGNING_ALLOWED=NO", analyze: true, buildlog_path: "#{BUILD}/logs")
-  end
-
-  lane :test do
-    workers = Integer(ENV.fetch("TEST_WORKERS", "1"))
-    run_tests(**project_options, destination: ENV.fetch("TEST_DESTINATION"), xcargs: "CODE_SIGNING_ALLOWED=NO", clean: true,
-      disable_concurrent_testing: workers == 1, parallel_testing: workers == 2, concurrent_workers: workers,
-      result_bundle: true, output_directory: "#{BUILD}/test_output", output_files: "report.junit", output_types: "junit",
-      only_testing: CONFIG.fetch("test_targets"), fail_build: true)
-  end
-
   lane :certificates do
     create_keychain(path: ENV.fetch("SIGNING_KEYCHAIN"), password: ENV.fetch("SIGNING_KEYCHAIN_PASSWORD"), default_keychain: false, unlock: true, timeout: 3600)
     match(type: "appstore", app_identifier: CONFIG.fetch("targets").map { |t| t.fetch("bundle_id") }, readonly: true,

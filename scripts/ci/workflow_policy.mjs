@@ -24,12 +24,13 @@ export function validate(workflows) {
     check(!s.uses.startsWith('actions/cache@'),label+': opaque executable caches forbidden');
    }
    if(file==='ci.yml') {check(!body.includes('secrets.')&&!j.environment&&!j.permissions?.['id-token'],label+': PR path must not receive secrets or privilege');}
-   if(/fastlane\.rb" (build|test|analyze)|swiftlint lint/.test(scripts))check(!j.permissions?.['id-token']&&!j.permissions?.attestations,label+': compilation must not sign provenance');
+   if(/fastlane\.rb" (build|test|analyze)|swiftlint lint|bin\/ios-release" qa (analyze|test)/.test(scripts))check(!j.permissions?.['id-token']&&!j.permissions?.attestations,label+': compilation must not sign provenance');
    if(/fastlane\.rb" build/.test(scripts))check(j.environment==='signing'&&!body.includes('APP_STORE_CONNECT_API_KEY'),label+': compilation signing boundary');
    if(/fastlane\.rb" submit/.test(scripts))check(j.environment==='production'&&scripts.includes('fetch.py')&&j.concurrency?.['cancel-in-progress']===false,label+': review requires production approval and reauthentication');
    if(j.environment && !['signing','app-store-observe'].includes(j.environment))check(!/bundle exec fastlane|scripts\/ci\/download_release/.test(scripts),label+': privileged job may not execute consumer Fastlane');
   }
  }
+ check(!/fastlane|actions\/ruby|bundle exec/.test(JSON.stringify(workflows['ci.yml'])), 'Native QA must not load Ruby or Fastlane');
  const prepare=workflows['prepare.yml'];
  check(![].concat(prepare.jobs.build.needs).includes('qa'),'Archive must run alongside QA');
  check(!prepare.jobs.upload&&!prepare.jobs.publish,'Preparation must not distribute');
