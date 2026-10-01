@@ -40,6 +40,7 @@ module IOSSimulatorRecovery
     def execute(_retries = 0, command: nil, language: nil, locale: nil, launch_args: nil, devices: nil)
       original_test_without_building = Snapshot.config[:test_without_building]
       original_clean = Snapshot.config[:clean]
+      original_launcher_clean = launcher_config.clean
       recovery_record = nil
       2.times do |attempt|
         begin
@@ -76,7 +77,10 @@ module IOSSimulatorRecovery
           id = Snapshot::TestCommandGenerator.device_udid(devices.first)
           IOSSimulatorRecovery.tool("reset", id)
           Snapshot.config[:clean] = false
+          launcher_config.clean = false
           prepare_for_launch(devices, language, locale, launch_args)
+          add_media(devices, :photo, launcher_config.add_photos) if launcher_config.add_photos
+          add_media(devices, :video, launcher_config.add_videos) if launcher_config.add_videos
           Snapshot.config[:test_without_building] = true
           command = Snapshot::TestCommandGenerator.generate(devices: devices, language: language, locale: locale, log_path: xcodebuild_log_path(language: language, locale: locale))
         end
@@ -90,6 +94,7 @@ module IOSSimulatorRecovery
       end
       Snapshot.config[:test_without_building] = original_test_without_building
       Snapshot.config[:clean] = original_clean
+      launcher_config.clean = original_launcher_clean
     end
   end
 

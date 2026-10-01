@@ -7,14 +7,20 @@ require_relative "../../../fastlane/lib/simulator_recovery"
 
 class SimulatorPreparation
   attr_reader :events
+  attr_reader :launcher_config
   def initialize
     @events = []
+    @launcher_config = Snapshot::SimulatorLauncherConfiguration.new(snapshot_config: {clean: true})
   end
   def prepare_simulators_for_launch(_devices, language: nil, locale: nil)
     @events << :fastlane_prepared
   end
   def prepare_for_launch(devices, language, locale, _args)
+    FileUtils.rm_rf(Snapshot::TestCommandGenerator.derived_data_path) if launcher_config.clean
     prepare_simulators_for_launch(devices, language: language, locale: locale)
+  end
+  def add_media(devices, kind, paths)
+    @events << [kind, paths]
   end
   def xcodebuild_log_path(language:, locale:)
     File.join(Snapshot.config[:buildlog_path], "capture.log")
@@ -99,6 +105,7 @@ class SimulatorRecoveryTest < Minitest::Test
       assert_equal ["inspect", "reset", "prepare"], operations
       assert_equal [:fastlane_prepared, :ready], adapter.events
       assert_nil config[:test_without_building]
+      assert adapter.launcher_config.clean
       record = Dir.glob(File.join(tmp, "logs/simulator-recovery/**/recovery.json")).first
       assert_equal "recovered", JSON.parse(File.read(record))["status"]
       assert_equal "first failure", File.read(File.join(File.dirname(record), "first-attempt.xcresult/original"))
@@ -135,6 +142,16 @@ class SimulatorRecoveryTest < Minitest::Test
       assert_raises(RuntimeError) { capture(adapter) }
       assert_equal 3, calls.length
       assert_equal 1, operations.count("reset")
+    end
+  end
+
+  def test_seeded_media_is_restored_after_the_selected_simulator_is_erased
+    with_adapter(statuses: [65, 0]) do |adapter, _, _|
+      adapter.launcher_config.add_photos = ['fixture.png']
+      adapter.launcher_config.add_videos = ['fixture.mov']
+      capture(adapter)
+      assert_includes adapter.events, [:photo, ['fixture.png']]
+      assert_includes adapter.events, [:video, ['fixture.mov']]
     end
   end
 end
