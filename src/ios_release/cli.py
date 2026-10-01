@@ -110,6 +110,7 @@ def check(argv, platform, app):
     args = parser.parse_args(argv)
     from . import docs, policy
     from .yamlio import workflows
+    platform_mode = docs.profile(app)["mode"] == "platform"
     consumer = app / "scripts/ci/workflow_policy.py"
     if (app / ".github/ios-release-platform.json").exists():
         subprocess.run([sys.executable, str(consumer)], check=True, cwd=app)
@@ -127,8 +128,10 @@ def check(argv, platform, app):
         policy.lint(app)
     # Keep each suite in a separate process: release tests import configuration at startup.
     test_env = {**os.environ}
-    if app == platform:
-        test_env.update(IOS_RELEASE_CONFIG=str(platform / "examples/picstrip.json"), IOS_RELEASE_REVISION="f" * 40,
+    if platform_mode:
+        # Actions installs tools from its immutable action checkout, which is
+        # a different directory from the platform workspace under test.
+        test_env.update(IOS_RELEASE_CONFIG=str(app / "examples/picstrip.json"), IOS_RELEASE_REVISION="f" * 40,
                         IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS=json.dumps(["f" * 40]))
         test_env.pop("GITHUB_REPOSITORY", None)
     for directory in [app / "tests", app / "scripts/ci/tests"]:
@@ -136,13 +139,13 @@ def check(argv, platform, app):
         if directory.is_dir() and directory.name in os.listdir(directory.parent):
             subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", str(directory), "-p", "test_*.py"], cwd=app, env=test_env, check=True)
     if args.apple:
-        if app != platform:
+        if not platform_mode:
             raise ValueError("--apple contract tests belong to the platform checkout")
         prefix = ruby_command(platform)
         ruby_env = apple_environment(platform, app)
         ruby_env.update({key: value for key, value in test_env.items() if key.startswith("IOS_RELEASE_")})
         ruby_env.pop("GITHUB_REPOSITORY", None)
-        for file in sorted((platform / "scripts/ci/tests").glob("*_test.rb")):
+        for file in sorted((app / "scripts/ci/tests").glob("*_test.rb")):
             subprocess.run([*prefix, "bundle", "exec", "ruby", str(file)], env=ruby_env, cwd=platform, check=True)
     print("Workflow policy, documentation and regression checks passed.")
     return 0
