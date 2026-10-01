@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ios_release.cli import apple_environment, ruby_command
+from ios_release.cli import apple_environment, ruby_command, check
 
 
 class SetupTests(unittest.TestCase):
@@ -20,3 +20,14 @@ class SetupTests(unittest.TestCase):
                 self.assertEqual(env["PATH"], "/managed/ruby/3.4.10/bin:/other/ruby/bin")
                 self.assertEqual(os.environ["PATH"], "/other/ruby/bin")
                 self.assertEqual(env["BUNDLE_FROZEN"], "true")
+
+    def test_platform_fixture_environment_survives_a_separate_action_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app, tools = Path(directory) / "workspace", Path(directory) / "action"
+            (app / "tests").mkdir(parents=True)
+            with patch("ios_release.docs.profile", return_value={"mode": "platform"}), patch("ios_release.yamlio.workflows", return_value={}), patch("ios_release.policy.validate", return_value=[]), patch("ios_release.docs.run", return_value=[]), patch("ios_release.cli.subprocess.run") as run:
+                check([], tools, app)
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["IOS_RELEASE_CONFIG"], str(app / "examples/picstrip.json"))
+            self.assertEqual(environment["IOS_RELEASE_REVISION"], "f" * 40)
+            self.assertNotIn("GITHUB_REPOSITORY", environment)
