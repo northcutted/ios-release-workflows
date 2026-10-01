@@ -10,6 +10,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      with:
+        version: "0.12.7"
+        enable-cache: false
+    - name: Install the locked platform package
+      shell: bash
+      run: |
+        root="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        uv sync --locked --no-dev --project "$root"
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
+      env:
+        UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/ios-release-python
     - shell: bash
       run: python3 "$GITHUB_ACTION_PATH/bootstrap.py"
       env:

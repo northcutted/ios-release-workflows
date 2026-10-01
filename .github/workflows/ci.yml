@@ -40,11 +40,11 @@ jobs:
       - name: Install verified SwiftLint
         run: bash "$IOS_RELEASE_ROOT/scripts/ci/install_swiftlint.sh"
       - name: Strict SwiftLint
-        run: python3 "$IOS_RELEASE_ROOT/bin/ios-release" qa lint
+        run: ios-release qa lint
         env:
           SOURCE_SHA: ${{ inputs.source }}
       - name: Audit configured string catalogs
-        run: python3 "$IOS_RELEASE_ROOT/bin/ios-release" qa localization
+        run: ios-release qa localization
         if: always()
         env:
           SOURCE_SHA: ${{ inputs.source }}
@@ -70,7 +70,7 @@ jobs:
           ref: ${{ inputs.source }}
       - *a2
       - name: Run analyze
-        run: python3 "$IOS_RELEASE_ROOT/bin/ios-release" qa analyze
+        run: ios-release qa analyze
         env:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}
@@ -96,7 +96,7 @@ jobs:
           ref: ${{ inputs.source }}
       - *a2
       - name: Run test
-        run: python3 "$IOS_RELEASE_ROOT/bin/ios-release" qa test
+        run: ios-release qa test
         env:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}
@@ -122,7 +122,7 @@ jobs:
           ref: ${{ inputs.source }}
       - *a2
       - name: Run test-compatibility
-        run: python3 "$IOS_RELEASE_ROOT/bin/ios-release" qa test-compatibility
+        run: ios-release qa test-compatibility
         env:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}

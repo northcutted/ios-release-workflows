@@ -1,5 +1,6 @@
 """Local build/screenshot adapters using only platform-owned Ruby dependencies."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -35,7 +36,7 @@ def main():
             command.append('devices:' + args.devices)
         if args.languages:
             command.append('languages:' + args.languages)
-    return subprocess.call(command, cwd=app, env=env)
+    return subprocess.call([*json.loads(env.get('IOS_RELEASE_RUBY_PREFIX', '[]')), *command], cwd=app, env=env)
 
 
 if __name__ == '__main__':

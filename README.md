@@ -26,14 +26,15 @@ flowchart LR
 
 App repositories keep their release operating guide, caller workflows, configuration, metadata and screenshots. This repository owns reusable implementation and its documentation. Pin callers and tools to one full reviewed commit. Link platform docs at that same revision so instructions and implementation stay aligned.
 
-Native analysis/tests use `xcodebuild` and validated xcresults without Ruby. Fastlane remains for signing, archive/export, screenshot capture and Apple delivery. Local and hosted tools use this repository's single locked Ruby dependency set.
+The Python package exposes one `ios-release` interface for setup, diagnostics, checks, documentation and builds. Native analysis/tests use `xcodebuild` and validated xcresults. Fastlane remains behind the Apple adapter for signing, archive/export, screenshot capture and delivery. Python and Ruby dependencies are locked here; callers require no Node installation or npm manifest.
 
 ## Work on the platform
 
 ```sh
-npm ci --ignore-scripts
+brew install uv # macOS; install uv through your package manager on other systems
+make setup
 make docs
-make check-docs
+make check
 ```
 
 Generation is local, deterministic and checked in CI. [Maintenance](docs/maintenance.md) covers the full regression suite and consumer verification required for behavior changes.

@@ -3,6 +3,8 @@ vendor/
 .bundle/
 __pycache__/
 *.pyc
+.venv/
+dist/
 build/
 release-assets/
 .DS_Store
