@@ -34,11 +34,10 @@ def prepare(value, output, timeout=180):
     result = {'udid': value, 'status': 'failed', 'timeout_seconds': timeout}
     started = time.monotonic()
     try:
-        result['before'] = device(value)
+        # The caller already resolved the exact device and runtime. bootstatus
+        # is the readiness barrier; inventory probes immediately after a cold
+        # boot can stall while CoreSimulator is servicing startup work.
         result['boot_log'] = command(['xcrun', 'simctl', 'bootstatus', value, '-b'], timeout=timeout)
-        result['after'] = device(value)
-        if result['after']['state'] != 'Booted':
-            raise ValueError('Simulator boot did not reach Booted')
         result['status'] = 'ready'
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         result['error'] = str(error)

@@ -55,15 +55,16 @@ class SimulatorTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / 'assessment.json').exists())
 
     def test_bounded_readiness_records_success_and_timeout(self):
-        selected = {'udid': ID, 'state': 'Shutdown', 'isAvailable': True}
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'readiness.json'
-            with patch('simulator.device', side_effect=[selected, dict(selected, state='Booted')]), patch('simulator.command', return_value='booted') as run:
+            with patch('simulator.device') as inventory, patch('simulator.command', return_value='booted') as run:
                 self.assertEqual(prepare(ID, output)['status'], 'ready')
                 run.assert_called_once_with(['xcrun', 'simctl', 'bootstatus', ID, '-b'], timeout=180)
-            with patch('simulator.device', return_value=selected), patch('simulator.command', side_effect=subprocess.TimeoutExpired('bootstatus', 180)):
+                inventory.assert_not_called()
+            with patch('simulator.device') as inventory, patch('simulator.command', side_effect=subprocess.TimeoutExpired('bootstatus', 180)):
                 with self.assertRaises(subprocess.TimeoutExpired):
                     prepare(ID, output)
+                inventory.assert_not_called()
             self.assertEqual(json.loads(output.read_text())['status'], 'failed')
 
     def test_reset_only_erases_the_resolved_device_on_a_disposable_host(self):
