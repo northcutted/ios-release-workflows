@@ -1,0 +1,17 @@
+{
+  "result": "Failed",
+  "passedTests": 0,
+  "failedTests": 1,
+  "skippedTests": 0,
+  "expectedFailures": 0,
+  "totalTestCount": 1,
+  "testFailures": [
+    {
+      "failureText": "Early unexpected exit, operation never finished bootstrapping - no restart will be attempted. (Underlying Error: The test runner crashed while preparing to run tests: PicStripUITests-Runner at -[XCTWaiter(StallHandling) handleStalledWait:])",
+      "targetName": "PicStripUITests",
+      "testIdentifier": 1,
+      "testIdentifierString": "PicStripUITests-Runner (18914) encountered an error",
+      "testName": "PicStripUITests-Runner (18914) encountered an error"
+    }
+  ]
+}

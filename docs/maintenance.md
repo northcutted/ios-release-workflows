@@ -39,6 +39,14 @@ Local consumers fetch the full reviewed commit with `setup`, which synchronizes 
 
 The installable wheel includes platform scripts, the Ruby adapter and its locks. App-owned screenshot scenarios and composition stay in the app. `setup --images` prepares its hash-locked requirements and `screenshots-compose` uses that isolated interpreter. `IOS_RELEASE_ROOT` is a trusted override set by the pinned bootstrap Action or deliberately for local platform development; it must never come from downloaded release evidence. The CLI does not grant GitHub/Apple authority; mutation commands retain their existing environment, authentication and approval requirements.
 
+## Simulator startup and recovery
+
+Native simulator tests wait up to 180 seconds for their exact resolved device to finish booting; readiness logs travel with the QA evidence. Screenshot readiness runs after Fastlane shuts down and configures its selected simulator. Screenshot XCTest is explicitly serial and collects diagnostics on failure.
+
+The screenshot adapter permits one automatic recovery per capture job on a disposable GitHub-hosted runner. It requires exit 65, matching XCTest summary and test-tree evidence containing only recognized runner bootstrap failures, no executed app tests, one selected device, and existing compiled `.xctestrun` products. Assertion failures, app-launch failures, unknown or missing evidence, and local/shared runners remain failures. Reset affects only the resolved simulator. The first result bundle, raw log and assessment are retained under `fastlane/screenshot_logs/simulator-recovery/`; the retry uses `test-without-building`, and a second failure is final. A recovery record reports whether the retry recovered or failed.
+
+App screenshot lanes load the helper path supplied by `ios-release screenshots`; keep scenario choices and locale selection in the app. The adapter is reviewed against locked Fastlane 2.240.1 and must be re-reviewed when that dependency changes. Verify both configured Xcode runtimes and each screenshot device on fresh hosted runners before adoption. A single green run establishes integration, not a long-term flake rate.
+
 ## Dependency compatibility
 
 Python dependencies are pinned in `pyproject.toml` and hash-locked in `uv.lock`. Version policy lives in `.github/ios-version.json`. The parser supports Conventional Commit headers, breaking notes, reverts, stable reachable tags and explicit release rules. Legacy `.releaserc.json` is accepted only for the supported Conventional Commits options; unsupported plugins/options fail before a candidate is prepared.

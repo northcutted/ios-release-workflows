@@ -9,6 +9,7 @@ import subprocess
 import sys
 import uuid
 import xml.etree.ElementTree as ET
+from simulator import prepare
 
 
 def junit(summary, tests):
@@ -66,6 +67,7 @@ def xcode_command(config, name, destination, result_bundle=None):
         raise ValueError('Explicit test targets are required')
     return args + ['-parallel-testing-enabled', 'YES' if workers == '2' else 'NO',
                    '-parallel-testing-worker-count', workers, '-maximum-concurrent-test-simulator-destinations', workers,
+                   '-collect-test-diagnostics', 'on-failure',
                    '-resultBundlePath', str(result_bundle),
                    *['-only-testing:' + target for target in config['test_targets']], 'clean', 'test']
 
@@ -100,6 +102,9 @@ def run(name, config):
                 os.environ.update(values)
                 Path('build').mkdir(exist_ok=True)
                 Path('build/build-env.json').write_text(json.dumps(environment, indent=2) + '\n')
+                if name.startswith('test'):
+                    selected = json.loads(values['SIMULATOR_UDIDS'])[config['test_device']]
+                    prepare(selected, root / 'simulator-readiness.json')
                 bundle = output / (name + '-' + uuid.uuid4().hex + '.xcresult')
                 command = xcode_command(config, name, values['TEST_DESTINATION'], bundle)
             status = stream(command, log)
