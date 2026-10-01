@@ -67,8 +67,12 @@ def setup(argv, platform, app):
     parser = argparse.ArgumentParser(description=COMMANDS["setup"][1])
     parser.add_argument("--apple", action="store_true")
     parser.add_argument("--images", action="store_true")
+    parser.add_argument("--checks", action="store_true", help="Install the pinned workflow syntax checker")
     args = parser.parse_args(argv)
     # The checkout launcher has already synchronized Python from uv.lock.
+    if args.checks or not (args.apple or args.images):
+        from .tools import actionlint
+        actionlint(app)
     if args.apple:
         prefix = ruby_command(platform, install=True)
         subprocess.run([*prefix, "bundle", "install", "--jobs", "4", "--retry", "3"], env=apple_environment(platform, app), check=True, cwd=app)
@@ -125,7 +129,8 @@ def check(argv, platform, app):
     if errors:
         raise ValueError("\n".join(errors))
     if args.syntax:
-        policy.lint(app)
+        from .tools import actionlint
+        policy.lint(app, str(actionlint(app)))
     # Keep each suite in a separate process: release tests import configuration at startup.
     test_env = {**os.environ}
     if platform_mode:
@@ -180,6 +185,14 @@ def main(argv=None):
         if args.command == "localization-pseudo":
             from .pseudo import main as run
             return run(args.arguments)
+        if args.command == "install-actionlint":
+            from .tools import actionlint
+            executable = actionlint(app)
+            if os.environ.get("GITHUB_PATH"):
+                with open(os.environ["GITHUB_PATH"], "a") as out:
+                    out.write(str(executable.parent) + "\n")
+            print(executable)
+            return 0
         if args.command == "screenshots-compose":
             python = app / "build/ios-release-images/bin/python"
             if not python.exists():

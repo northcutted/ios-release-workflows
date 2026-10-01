@@ -71,7 +71,7 @@ def validate(items):
     return errors
 
 
-def lint(root):
+def lint(root, executable="actionlint"):
     root = Path(root).resolve()
     with tempfile.TemporaryDirectory(prefix="ios-actionlint-") as temp:
         paths = []
@@ -89,4 +89,4 @@ def lint(root):
             path = Path(temp) / file
             path.write_text(yaml.safe_dump(w, sort_keys=False))
             paths.append(str(path))
-        subprocess.run(["actionlint", "-config-file", str(root / ".github/actionlint.yaml"), *paths], check=True, cwd=root)
+        subprocess.run([executable, "-config-file", str(root / ".github/actionlint.yaml"), *paths], check=True, cwd=root)

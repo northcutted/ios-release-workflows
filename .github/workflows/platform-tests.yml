@@ -43,9 +43,6 @@ jobs:
         uses: $/actions/slsa-verifier
       - name: Exercise installed verifier
         run: slsa-verifier version
-      - name: Install pinned workflow validator
-        if: runner.os == 'Linux'
-        run: bash scripts/ci/install_actionlint.sh
       - name: Check workflow boundaries and syntax
         if: runner.os == 'Linux'
         run: ios-release check --syntax
