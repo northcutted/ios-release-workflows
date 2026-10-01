@@ -37,28 +37,24 @@ jobs:
           config: build/consumer.json
           revision: ${{ github.sha }}
       - uses: $/actions/ruby
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: "24"
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Check generated documentation and links
-        run: npm run check:docs
       - name: Run cross-consumer and release regression tests
-        run: env -u GITHUB_REPOSITORY IOS_RELEASE_CONFIG="$PWD/examples/picstrip.json"
-          IOS_RELEASE_REVISION=ffffffffffffffffffffffffffffffffffffffff
-          IOS_RELEASE_TRUSTED_PRODUCER_REVISIONS='["ffffffffffffffffffffffffffffffffffffffff"]'
-          npm run test:ci
+        run: ios-release check --apple
       - name: Install platform-appropriate SLSA verifier
         uses: $/actions/slsa-verifier
       - name: Exercise installed verifier
         run: slsa-verifier version
-      - name: Install pinned workflow validator
-        if: runner.os == 'Linux'
-        run: bash scripts/ci/install_actionlint.sh
       - name: Check workflow boundaries and syntax
         if: runner.os == 'Linux'
-        run: npm run check:workflows
+        run: ios-release check --syntax
       - name: Check Ruby and shell syntax
         run: |-
           ruby -c fastlane/Fastfile
           for script in scripts/ci/*.sh; do bash -n "$script"; done
+      - name: Build and smoke test the installed wheel
+        run: |
+          uv build --wheel
+          uv venv "$RUNNER_TEMP/wheel-test"
+          uv pip install --python "$RUNNER_TEMP/wheel-test/bin/python" dist/*.whl
+          "$RUNNER_TEMP/wheel-test/bin/ios-release" --commands-json
+          "$RUNNER_TEMP/wheel-test/bin/ios-release" doctor
+          "$RUNNER_TEMP/wheel-test/bin/ios-release" qa --help

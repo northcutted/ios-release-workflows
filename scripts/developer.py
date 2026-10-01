@@ -1,8 +1,10 @@
 """Local build/screenshot adapters using only platform-owned Ruby dependencies."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,12 +32,15 @@ def main():
         command = ['bundle', 'exec', 'ruby', str(ROOT / 'scripts/fastlane.rb'), 'build']
     else:
         # Screenshot scenarios are intentionally app-owned and run without release secrets.
+        env.update(IOS_RELEASE_SIMULATOR_HELPER=str(ROOT / 'fastlane/lib/simulator_recovery.rb'),
+                   IOS_RELEASE_SIMULATOR_TOOL=str(ROOT / 'scripts/ci/simulator.py'),
+                   IOS_RELEASE_PYTHON=sys.executable)
         command = ['bundle', 'exec', 'fastlane', 'screenshots']
         if args.devices:
             command.append('devices:' + args.devices)
         if args.languages:
             command.append('languages:' + args.languages)
-    return subprocess.call(command, cwd=app, env=env)
+    return subprocess.call([*json.loads(env.get('IOS_RELEASE_RUBY_PREFIX', '[]')), *command], cwd=app, env=env)
 
 
 if __name__ == '__main__':

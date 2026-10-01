@@ -57,11 +57,13 @@ class NativeQATest(unittest.TestCase):
         self.assertIn('-only-testing:ExtensionTests', args)
         self.assertEqual(args[args.index('-parallel-testing-enabled') + 1], 'NO')
         self.assertIn('CODE_SIGNING_ALLOWED=NO', args)
+        self.assertEqual(args[args.index('-collect-test-diagnostics') + 1], 'on-failure')
         with patch.dict(os.environ, {'TEST_WORKERS': '3'}), self.assertRaises(ValueError):
             xcode_command(config, 'test', 'destination', 'bundle')
 
     def test_real_runner_keeps_exit_status_and_never_reuses_stale_junit(self):
         config = json.loads((ROOT / 'examples/minimal.json').read_text())
+        resolved = {'TEST_DESTINATION': 'exact', 'SIMULATOR_UDIDS': json.dumps({config['test_device']: 'C71FB2C5-952C-4E6D-A2AD-1ADAE3B28FA1'})}
         summary, tree = results(['Passed'])
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as tmp:
@@ -71,12 +73,12 @@ class NativeQATest(unittest.TestCase):
             output.mkdir(parents=True)
             (output / 'report.junit').write_text('<stale/>')
             env = {'SOURCE_SHA': 'a' * 40, 'GITHUB_RUN_ID': '123'}
-            with patch.dict(os.environ, env), patch('toolchain.resolve', return_value=({'TEST_DESTINATION': 'exact'}, {})), \
+            with patch.dict(os.environ, env), patch('toolchain.resolve', return_value=(resolved, {})), patch('native_qa.prepare'), \
                  patch('native_qa.stream', return_value=65), patch('native_qa.subprocess.check_output', side_effect=[json.dumps(summary), json.dumps(tree)]):
                 self.assertEqual(run('test', config), 65)
             self.assertEqual(json.loads((output / 'result.json').read_text())['source_sha'], 'a' * 40)
             self.assertNotIn('stale', (output / 'report.junit').read_text())
-            with patch('toolchain.resolve', return_value=({'TEST_DESTINATION': 'exact'}, {})), \
+            with patch('toolchain.resolve', return_value=(resolved, {})), patch('native_qa.prepare'), \
                  patch('native_qa.stream', return_value=0), patch('native_qa.subprocess.check_output', side_effect=FileNotFoundError('xcresult unavailable')):
                 self.assertNotEqual(run('test', config), 0)
             self.assertFalse((output / 'report.junit').exists())
@@ -89,6 +91,21 @@ class NativeQATest(unittest.TestCase):
             contract = json.loads(output)
             self.assertEqual(contract['schema_version'], 1)
             self.assertIn('qa', contract['commands'])
+
+    def test_readiness_timeout_prevents_xctest_and_records_failed_qa(self):
+        config = json.loads((ROOT / 'examples/minimal.json').read_text())
+        resolved = {'TEST_DESTINATION': 'exact', 'SIMULATOR_UDIDS': json.dumps({config['test_device']: 'C71FB2C5-952C-4E6D-A2AD-1ADAE3B28FA1'})}
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                with patch('toolchain.resolve', return_value=(resolved, {})), patch('native_qa.prepare', side_effect=subprocess.TimeoutExpired('bootstatus', 180)), patch('native_qa.stream') as execute:
+                    self.assertNotEqual(run('test', config), 0)
+                    execute.assert_not_called()
+                self.assertNotEqual(json.loads(Path('qa-results/test/result.json').read_text())['status'], 0)
+                self.assertFalse(Path('qa-results/test/report.junit').exists())
+            finally:
+                os.chdir(previous)
 
 
 if __name__ == '__main__':

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Supported platform command interface. Run --help without configuring an app."""
+"""Run the reviewed checkout's locked package; no ambient Python dependencies."""
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from cli import main
-
-sys.exit(main())
+root = Path(__file__).resolve().parents[1]
+uv = shutil.which("uv")
+if not uv:
+    sys.exit("Install uv (on macOS: brew install uv), then run ios-release setup.")
+app = Path(os.environ.get("IOS_APP_ROOT", os.getcwd())).resolve()
+environment = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(Path(os.environ.get("RUNNER_TEMP", app / "build")) / "ios-release-python")}
+sys.exit(subprocess.call([uv, "run", "--locked", "--no-dev", "--project", str(root), "ios-release", *sys.argv[1:]], env=environment))

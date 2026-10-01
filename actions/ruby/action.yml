@@ -8,6 +8,4 @@ runs:
         ruby-version: 3.4.10
         bundler-cache: false
     - shell: bash
-      run: bundle install --jobs 4 --retry 3
-      env:
-        BUNDLE_FROZEN: "true"
+      run: ios-release setup --apple

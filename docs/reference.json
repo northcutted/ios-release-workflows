@@ -4,7 +4,7 @@
   "sources": [
     ".github/ios-release-docs.json",
     ".ruby-version",
-    "scripts/cli.py",
+    "src/ios_release/cli.py",
     ".github/workflows/ci.yml",
     ".github/workflows/deploy.yml",
     ".github/workflows/observe.yml",
@@ -49,17 +49,44 @@
   "commands": {
     "schema_version": 1,
     "commands": {
-      "gems-install": {
-        "description": "Install the locked platform Ruby dependencies for local Apple tools"
+      "setup": {
+        "description": "Prepare the task's locked tools; --apple adds Ruby, --images adds app image dependencies"
+      },
+      "doctor": {
+        "description": "Check Python, optional Apple tools and configured Xcode without changing them"
+      },
+      "check": {
+        "description": "Check workflow policy, documentation and regression tests; --syntax adds actionlint"
+      },
+      "docs": {
+        "description": "Generate or check deterministic consumer documentation"
+      },
+      "version": {
+        "description": "Calculate a read-only candidate version and release notes"
+      },
+      "localization-pseudo": {
+        "description": "Pseudo-localize catalogs for layout smoke checks"
+      },
+      "screenshots-compose": {
+        "description": "Run app-owned screenshot composition with its locked image tools"
+      },
+      "test": {
+        "description": "Run the configured simulator tests and preserve QA evidence"
+      },
+      "qa": {
+        "description": "Run lint, localization, analysis or tests; preserve QA evidence"
       },
       "archive": {
         "description": "Archive and export locally using installed signing profiles"
       },
-      "screenshots-capture": {
-        "description": "Run app-owned screenshot scenarios with platform dependencies"
+      "screenshots": {
+        "description": "Run app-owned screenshot scenarios with locked platform dependencies"
       },
-      "qa": {
-        "description": "Run lint, localization, analysis or tests; preserve QA evidence"
+      "screenshots-capture": {
+        "description": "Compatibility alias for screenshots"
+      },
+      "gems-install": {
+        "description": "Compatibility alias for setup --apple"
       },
       "toolchain": {
         "description": "Validate Xcode and resolve exact simulators"
@@ -87,9 +114,6 @@
       },
       "install-actionlint": {
         "description": "Install the pinned workflow validator"
-      },
-      "docs": {
-        "description": "Generate or check deterministic consumer documentation"
       }
     }
   },

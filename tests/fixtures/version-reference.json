@@ -1,0 +1,234 @@
+{
+  "producer": "7a46c1836198c54fd0a9269dbf41772b726a6977",
+  "description": "Captured from the locked Node version analyzer before migration; dates normalized.",
+  "cases": [
+    {
+      "name": "documentation",
+      "commits": [
+        {
+          "hash": "deb26fa5ed1bfaa8589716d80a326339540bd0ae",
+          "message": "docs: clarify usage"
+        }
+      ],
+      "expected": {
+        "will_release": false,
+        "version": "1.6.5",
+        "git_tag": "v1.6.5",
+        "replacement_for": null,
+        "source_sha": "deb26fa5ed1bfaa8589716d80a326339540bd0ae",
+        "notes": "Verification build; no release changes."
+      }
+    },
+    {
+      "name": "patch",
+      "commits": [
+        {
+          "hash": "2af811bb19ce336ac0419e27820cf37b08242a29",
+          "message": "fix: reject bad bytes"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "1.6.6",
+        "git_tag": "v1.6.6",
+        "replacement_for": null,
+        "source_sha": "2af811bb19ce336ac0419e27820cf37b08242a29",
+        "notes": "## [1.6.6](https://github.com/example/fixture/compare/v1.6.5...v1.6.6) (DATE)\n\n### Bug Fixes\n\n* reject bad bytes ([2af811b](https://github.com/example/fixture/commit/2af811bb19ce336ac0419e27820cf37b08242a29))\n"
+      }
+    },
+    {
+      "name": "minor",
+      "commits": [
+        {
+          "hash": "e1244ede340953738ff4d54706e7c00911f0faa5",
+          "message": "feat(camera): add capture"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "1.7.0",
+        "git_tag": "v1.7.0",
+        "replacement_for": null,
+        "source_sha": "e1244ede340953738ff4d54706e7c00911f0faa5",
+        "notes": "## [1.7.0](https://github.com/example/fixture/compare/v1.6.5...v1.7.0) (DATE)\n\n### Features\n\n* **camera:** add capture ([e1244ed](https://github.com/example/fixture/commit/e1244ede340953738ff4d54706e7c00911f0faa5))\n"
+      }
+    },
+    {
+      "name": "breaking-header",
+      "commits": [
+        {
+          "hash": "965c5efd2d8e6db870dfc2fa236656023035b7e6",
+          "message": "feat!: change export contract"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "2.0.0",
+        "git_tag": "v2.0.0",
+        "replacement_for": null,
+        "source_sha": "965c5efd2d8e6db870dfc2fa236656023035b7e6",
+        "notes": "## [2.0.0](https://github.com/example/fixture/compare/v1.6.5...v2.0.0) (DATE)\n\n### ⚠ BREAKING CHANGES\n\n* change export contract\n\n### Features\n\n* change export contract ([965c5ef](https://github.com/example/fixture/commit/965c5efd2d8e6db870dfc2fa236656023035b7e6))\n"
+      }
+    },
+    {
+      "name": "breaking-footer",
+      "commits": [
+        {
+          "hash": "f503fb7c5916f7918b6b4d2bec3db6cf4caaa914",
+          "message": "fix(parser): change format\n\nBREAKING CHANGE: use a new output format"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "2.0.0",
+        "git_tag": "v2.0.0",
+        "replacement_for": null,
+        "source_sha": "f503fb7c5916f7918b6b4d2bec3db6cf4caaa914",
+        "notes": "## [2.0.0](https://github.com/example/fixture/compare/v1.6.5...v2.0.0) (DATE)\n\n### ⚠ BREAKING CHANGES\n\n* **parser:** use a new output format\n\n### Bug Fixes\n\n* **parser:** change format ([f503fb7](https://github.com/example/fixture/commit/f503fb7c5916f7918b6b4d2bec3db6cf4caaa914))\n"
+      }
+    },
+    {
+      "name": "mixed",
+      "commits": [
+        {
+          "hash": "d36c2cafada63efd32a49c5a92fa3c15e1909983",
+          "message": "feat!: change API\n\nBREAKING CHANGE: replace export contract"
+        },
+        {
+          "hash": "97e6dc38c0b982d615dc4c85663349c77266eb2b",
+          "message": "fix(parser): protect #12\n\nCloses #14"
+        },
+        {
+          "hash": "4604e11267928dd286e8a242b85a2abc65349deb",
+          "message": "perf: reduce allocations"
+        },
+        {
+          "hash": "70cded8efe063087b2b39caf62a445f9aa72fbcc",
+          "message": "chore: housekeeping"
+        },
+        {
+          "hash": "d709ee9e99ee8be20d3500208608233dbf564885",
+          "message": "docs: explain usage"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "2.0.0",
+        "git_tag": "v2.0.0",
+        "replacement_for": null,
+        "source_sha": "d36c2cafada63efd32a49c5a92fa3c15e1909983",
+        "notes": "## [2.0.0](https://github.com/example/fixture/compare/v1.6.5...v2.0.0) (DATE)\n\n### ⚠ BREAKING CHANGES\n\n* replace export contract\n\n* housekeeping ([70cded8](https://github.com/example/fixture/commit/70cded8efe063087b2b39caf62a445f9aa72fbcc))\n\n### Features\n\n* change API ([d36c2ca](https://github.com/example/fixture/commit/d36c2cafada63efd32a49c5a92fa3c15e1909983))\n\n### Bug Fixes\n\n* **parser:** protect [#12](https://github.com/example/fixture/issues/12) ([97e6dc3](https://github.com/example/fixture/commit/97e6dc38c0b982d615dc4c85663349c77266eb2b)), closes [#14](https://github.com/example/fixture/issues/14)\n\n### Performance\n\n* reduce allocations ([4604e11](https://github.com/example/fixture/commit/4604e11267928dd286e8a242b85a2abc65349deb))\n\n### Documentation\n\n* explain usage ([d709ee9](https://github.com/example/fixture/commit/d709ee9e99ee8be20d3500208608233dbf564885))\n"
+      }
+    },
+    {
+      "name": "revert-pair",
+      "commits": [
+        {
+          "hash": "db6c40ec68495bdc4c2c0f9f6734d4e90e425d8b",
+          "message": "Revert \"feat: temporary feature\"\n\nThis reverts commit fb9b395887e9dc2f3dd986fdd226cf679eb0bd4a."
+        },
+        {
+          "hash": "fb9b395887e9dc2f3dd986fdd226cf679eb0bd4a",
+          "message": "feat: temporary feature"
+        }
+      ],
+      "expected": {
+        "will_release": false,
+        "version": "1.6.5",
+        "git_tag": "v1.6.5",
+        "replacement_for": null,
+        "source_sha": "db6c40ec68495bdc4c2c0f9f6734d4e90e425d8b",
+        "notes": "Verification build; no release changes."
+      }
+    },
+    {
+      "name": "standalone-revert",
+      "commits": [
+        {
+          "hash": "b4b2a17750f9e6e8aac1a64d147e3989e9c4d7ef",
+          "message": "revert: undo previous change\n\nThis reverts commit 0123456789012345678901234567890123456789."
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "1.6.6",
+        "git_tag": "v1.6.6",
+        "replacement_for": null,
+        "source_sha": "b4b2a17750f9e6e8aac1a64d147e3989e9c4d7ef",
+        "notes": "## [1.6.6](https://github.com/example/fixture/compare/v1.6.5...v1.6.6) (DATE)\n\n### Reverts\n\n* undo previous change ([b4b2a17](https://github.com/example/fixture/commit/b4b2a17750f9e6e8aac1a64d147e3989e9c4d7ef))\n"
+      }
+    },
+    {
+      "name": "nonconventional",
+      "commits": [
+        {
+          "hash": "dabd9d7813c7857d69cde079dbe34d69e304ace0",
+          "message": "Merge branch feature"
+        },
+        {
+          "hash": "1f5717b5e1458c132ed393dac02c90ace46b9d05",
+          "message": "Update README"
+        }
+      ],
+      "expected": {
+        "will_release": false,
+        "version": "1.6.5",
+        "git_tag": "v1.6.5",
+        "replacement_for": null,
+        "source_sha": "dabd9d7813c7857d69cde079dbe34d69e304ace0",
+        "notes": "Verification build; no release changes."
+      }
+    },
+    {
+      "name": "breaking-chore",
+      "commits": [
+        {
+          "hash": "f824b7f009d1e2fb1efe59800fa6f920c48403e8",
+          "message": "chore!: drop support"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "2.0.0",
+        "git_tag": "v2.0.0",
+        "replacement_for": null,
+        "source_sha": "f824b7f009d1e2fb1efe59800fa6f920c48403e8",
+        "notes": "## [2.0.0](https://github.com/example/fixture/compare/v1.6.5...v2.0.0) (DATE)\n\n### ⚠ BREAKING CHANGES\n\n* drop support\n\n* drop support ([f824b7f](https://github.com/example/fixture/commit/f824b7f009d1e2fb1efe59800fa6f920c48403e8))\n"
+      }
+    },
+    {
+      "name": "multiline",
+      "commits": [
+        {
+          "hash": "da01d4be190ba5894350690f72b5157c33b02d56",
+          "message": "feat(parser): introduce formats\n\nBREAKING-CHANGE: replace the format\nwith a new format"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "2.0.0",
+        "git_tag": "v2.0.0",
+        "replacement_for": null,
+        "source_sha": "da01d4be190ba5894350690f72b5157c33b02d56",
+        "notes": "## [2.0.0](https://github.com/example/fixture/compare/v1.6.5...v2.0.0) (DATE)\n\n### ⚠ BREAKING CHANGES\n\n* **parser:** replace the format\n  with a new format\n\n### Features\n\n* **parser:** introduce formats ([da01d4b](https://github.com/example/fixture/commit/da01d4be190ba5894350690f72b5157c33b02d56))\n"
+      }
+    },
+    {
+      "name": "replacement",
+      "commits": [
+        {
+          "hash": "1f3deece1d1230ed255ff94b11325a9714ab23f9",
+          "message": "feat: revise privacy review"
+        }
+      ],
+      "expected": {
+        "will_release": true,
+        "version": "1.6.5",
+        "git_tag": null,
+        "replacement_for": "v1.6.5",
+        "source_sha": "1f3deece1d1230ed255ff94b11325a9714ab23f9",
+        "notes": "## [1.6.5](https://github.com/example/fixture/compare/v1.6.5...1f3deece1d1230ed255ff94b11325a9714ab23f9) (DATE)\n\n### Features\n\n* revise privacy review ([1f3deec](https://github.com/example/fixture/commit/1f3deece1d1230ed255ff94b11325a9714ab23f9))\n"
+      }
+    }
+  ]
+}

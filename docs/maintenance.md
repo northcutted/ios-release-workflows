@@ -5,14 +5,15 @@
 ## Edit loop
 
 ```sh
-npm ci --ignore-scripts
+make setup
 make docs
-make check-docs
-npm run check:workflows
-npm run test:ci
+make check
+# Also exercise Apple adapter contracts:
+python3 bin/ios-release setup --apple
+python3 bin/ios-release check --apple
 ```
 
-The complete test suite also needs the locked Ruby gems. Linux and macOS CI exercise the contracts and real verifier installation. Changes to native QA additionally need a consumer run on both configured Xcode runtimes; mocked commands and recorded xcresults cannot prove a fresh build.
+`check` runs workflow policy, documentation/link checks and Python regression tests; `--syntax` also runs actionlint. `--apple` adds the locked Ruby contract tests. Linux and macOS CI exercise the contracts and real verifier installation. Changes to native QA additionally need a consumer run on both configured Xcode runtimes; mocked commands and recorded xcresults cannot prove a fresh build.
 
 ## Documentation generation
 
@@ -34,13 +35,23 @@ Generated JSON has `schema_version: 2`. It adds reusable outputs/secrets and pro
 
 Call `python3 /path/to/platform/bin/ios-release --help`, or inspect `--commands-json`. Global `--app-root` and `--config` select the consumer. Command arguments follow the command name; `qa --help` and other subcommand help describe them. Prefer this surface to internal `scripts/ci` paths. Reusable workflow inputs and this CLI are the supported integration points.
 
-Local consumers cache the full reviewed commit explicitly, then work offline. `IOS_RELEASE_ROOT` is a trusted override set by the pinned bootstrap Action or deliberately for local platform development; it must never come from downloaded release evidence. The CLI does not grant GitHub/Apple authority; mutation commands retain their existing environment, authentication and approval requirements.
+Local consumers fetch the full reviewed commit with `setup`, which synchronizes the Python environment from `uv.lock`; subsequent commands reuse it. The source launcher needs uv. The bootstrap Action installs pinned uv and Python, synchronizes the same lock and exposes `ios-release` on PATH. `setup --apple` installs locked gems using the exact Ruby version; it can install that version with mise locally without changing the active Ruby. `doctor --apple --xcode` reports missing tools or mismatches. Xcode must already be installed.
+
+The installable wheel includes platform scripts, the Ruby adapter and its locks. App-owned screenshot scenarios and composition stay in the app. `setup --images` prepares its hash-locked requirements and `screenshots-compose` uses that isolated interpreter. `IOS_RELEASE_ROOT` is a trusted override set by the pinned bootstrap Action or deliberately for local platform development; it must never come from downloaded release evidence. The CLI does not grant GitHub/Apple authority; mutation commands retain their existing environment, authentication and approval requirements.
+
+## Simulator startup and recovery
+
+Native simulator tests wait up to 180 seconds for their exact resolved device to finish booting; readiness logs travel with the QA evidence. Screenshot readiness runs after Fastlane shuts down and configures its selected simulator. Screenshot XCTest is explicitly serial and collects diagnostics on failure.
+
+The screenshot adapter permits one automatic recovery per capture job on a disposable GitHub-hosted runner. It requires exit 65, matching XCTest summary and test-tree evidence containing only recognized runner bootstrap failures, no executed app tests, one selected device, and existing compiled `.xctestrun` products. Assertion failures, app-launch failures, unknown or missing evidence, and local/shared runners remain failures. Reset affects only the resolved simulator. The first result bundle, raw log and assessment are retained under `fastlane/screenshot_logs/simulator-recovery/`; the retry uses `test-without-building`, and a second failure is final. A recovery record reports whether the retry recovered or failed.
+
+App screenshot lanes load the helper path supplied by `ios-release screenshots`; keep scenario choices and locale selection in the app. The adapter is reviewed against locked Fastlane 2.240.1 and must be re-reviewed when that dependency changes. Verify both configured Xcode runtimes and each screenshot device on fresh hosted runners before adoption. A single green run establishes integration, not a long-term flake rate.
 
 ## Dependency compatibility
 
-Dependabot groups release-analysis packages because parser and preset major versions must remain compatible. Regression tests cover version rules and rendered release notes.
+Python dependencies are pinned in `pyproject.toml` and hash-locked in `uv.lock`. Version policy lives in `.github/ios-version.json`. The parser supports Conventional Commit headers, breaking notes, reverts, stable reachable tags and explicit release rules. Legacy `.releaserc.json` is accepted only for the supported Conventional Commits options; unsupported plugins/options fail before a candidate is prepared.
 
-The notes generator 14.1.1 requests writer 8, while the Conventional Commits 10.4.0 preset requires writer 9. A scoped npm override pins `conventional-changelog-writer` to 9.2.1, whose `writeChangelogString` export is compatible with the generator. Remove this override when the generator supports writer 9, with the regression suite passing. See the [preset release notes](https://github.com/conventional-changelog/conventional-changelog/releases/tag/conventional-changelog-conventionalcommits-v10.4.0).
+The checked-in reference fixture captures version decisions and exact release-note text from the former locked Node analyzer. Compare new behavior against it before modifying version semantics. Linux and macOS CI also build and install the wheel outside the checkout.
 
 Minitest 6 extracted mocks into [minitest-mock](https://github.com/minitest/minitest-mock); contract tests declare and require that dependency explicitly. Ruby dependencies remain locked with checksums.
 

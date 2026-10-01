@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ios-release-toolkit"
+version = "2.0.0"
+description = "Pinned iOS build, validation and release tools"
+requires-python = ">=3.13"
+dependencies = ["PyYAML==6.0.3"]
+
+[project.scripts]
+ios-release = "ios_release.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ios_release"]
+exclude = ["**/__pycache__", "**/*.pyc", "scripts/ci/tests"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"scripts" = "ios_release/assets/scripts"
+"fastlane" = "ios_release/assets/fastlane"
+"Gemfile" = "ios_release/assets/Gemfile"
+"Gemfile.lock" = "ios_release/assets/Gemfile.lock"
+".ruby-version" = "ios_release/assets/.ruby-version"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "scripts", "fastlane", "Gemfile", "Gemfile.lock", ".ruby-version", ".python-version", "pyproject.toml", "uv.lock", "bin"]

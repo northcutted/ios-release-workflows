@@ -22,7 +22,7 @@ Ruby is limited to signing (`match`), archive/export (`gym`), screenshot capture
 
 The target is SLSA Build L3 for the GitHub-produced IPA, not Apple's redistributed binary. The isolated generator protects provenance keys from app compilation; native attestations additionally bind evidence and receipts. Source control, environment approvals, producer pinning, artifact verification, immutable publication, and consumer-owned credentials are separate required controls. Passing provenance verification alone is not certification of the complete deployment.
 
-Run `npm ci --ignore-scripts`, install the locked Ruby gems, then `npm run check:workflows` and `npm run test:ci`. The actionlint adapter validates `$/` targets before normalizing their spelling for actionlint 1.7.12, which predates that documented GitHub syntax. No source files are rewritten by linting.
+Run `make setup`, `make check`, then `python3 bin/ios-release setup --apple` and `python3 bin/ios-release check --apple` for Apple contracts. The actionlint adapter validates `$/` targets before normalizing their spelling for actionlint 1.7.12, which predates that documented GitHub syntax. No source files are rewritten by linting.
 
 Accessibility synchronization preserves matching declarations and checks their readback. Draft updates contain feature booleans only; `deviceFamily` is creation-only. Changed published declarations require an explicitly prepared replacement draft.
 

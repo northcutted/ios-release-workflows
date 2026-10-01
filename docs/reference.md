@@ -16,10 +16,19 @@ Platform: northcutted/ios-release-workflows.
 
 | Command | Purpose |
 | --- | --- |
-| <code>gems-install</code> | Install the locked platform Ruby dependencies for local Apple tools |
-| <code>archive</code> | Archive and export locally using installed signing profiles |
-| <code>screenshots-capture</code> | Run app-owned screenshot scenarios with platform dependencies |
+| <code>setup</code> | Prepare the task's locked tools; --apple adds Ruby, --images adds app image dependencies |
+| <code>doctor</code> | Check Python, optional Apple tools and configured Xcode without changing them |
+| <code>check</code> | Check workflow policy, documentation and regression tests; --syntax adds actionlint |
+| <code>docs</code> | Generate or check deterministic consumer documentation |
+| <code>version</code> | Calculate a read-only candidate version and release notes |
+| <code>localization-pseudo</code> | Pseudo-localize catalogs for layout smoke checks |
+| <code>screenshots-compose</code> | Run app-owned screenshot composition with its locked image tools |
+| <code>test</code> | Run the configured simulator tests and preserve QA evidence |
 | <code>qa</code> | Run lint, localization, analysis or tests; preserve QA evidence |
+| <code>archive</code> | Archive and export locally using installed signing profiles |
+| <code>screenshots</code> | Run app-owned screenshot scenarios with locked platform dependencies |
+| <code>screenshots-capture</code> | Compatibility alias for screenshots |
+| <code>gems-install</code> | Compatibility alias for setup --apple |
 | <code>toolchain</code> | Validate Xcode and resolve exact simulators |
 | <code>screenshots-verify</code> | Validate configured screenshot coverage and dimensions |
 | <code>screenshots-publish</code> | Create the screenshot update PR in its protected workflow |
@@ -29,7 +38,6 @@ Platform: northcutted/ios-release-workflows.
 | <code>controls-capture</code> | Capture an owner-verified repository control baseline |
 | <code>benchmark</code> | Compare workflow job timings |
 | <code>install-actionlint</code> | Install the pinned workflow validator |
-| <code>docs</code> | Generate or check deterministic consumer documentation |
 
 ## Workflows
 

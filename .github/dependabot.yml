@@ -5,13 +5,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
-  - package-ecosystem: npm
+  - package-ecosystem: uv
     directory: /
-    groups:
-      release-analysis:
-        patterns:
-          - "@semantic-release/*"
-          - "conventional-*"
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
