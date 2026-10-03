@@ -100,7 +100,16 @@ fn run(cli: Cli) -> Result<i32> {
         println!(
             "{}",
             serde_json::to_string_pretty(
-                &json!({"schema_version":1,"implementation":"rust","experimental":true,"commands":["doctor","toolchain","qa","test","archive","screenshots","screenshots-capture","xcresult-report"],"apple_store_mutations":false})
+                &json!({"schema_version":1,"implementation":"rust","experimental":true,"commands":{
+                    "doctor":{"description":"Inspect native runtime requirements and optional configured Xcode"},
+                    "toolchain":{"description":"Validate Xcode and resolve exact simulators"},
+                    "qa":{"description":"Run lint, localization, analysis or configured tests; retain QA evidence"},
+                    "test":{"description":"Run configured simulator tests"},
+                    "archive":{"description":"Archive and export locally using installed signing assets"},
+                    "screenshots":{"description":"Capture app-owned screenshot scenarios using compiled tests"},
+                    "screenshots-capture":{"description":"Compatibility alias for screenshots"},
+                    "xcresult-report":{"description":"Reconcile exported XCTest summary and cases"}
+                },"apple_store_mutations":false})
             )?
         );
         return Ok(0);

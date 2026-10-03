@@ -660,3 +660,25 @@ fn release_export_rejects_debug_profiles_and_malformed_entitlements() {
             .contains("App Store")
     );
 }
+
+#[test]
+fn public_diagnostics_work_without_app_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let execute = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_ios-release"))
+            .args(args)
+            .current_dir(dir.path())
+            .env_remove("IOS_RELEASE_CONFIG")
+            .output()
+            .unwrap()
+    };
+    let contract = execute(&["--commands-json"]);
+    assert!(contract.status.success());
+    let contract: Value = serde_json::from_slice(&contract.stdout).unwrap();
+    assert_eq!(contract["schema_version"], 1);
+    assert!(contract["commands"]["qa"]["description"].is_string());
+    assert_eq!(contract["apple_store_mutations"], false);
+    assert!(execute(&["doctor"]).status.success());
+    assert!(execute(&["qa", "--help"]).status.success());
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+}

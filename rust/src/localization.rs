@@ -2,12 +2,15 @@ use crate::config::{App, relative_path};
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde_json::Value;
-use std::fs;
+use std::{fs, sync::LazyLock};
+
+static SPECIFIERS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"%(?:(\d+)\$)?(lld|ld|d|@|f|\.\d+f)").expect("constant format pattern")
+});
 
 pub fn specifiers(text: &str) -> Option<Vec<(usize, String)>> {
-    let regex = Regex::new(r"%(?:(\d+)\$)?(lld|ld|d|@|f|\.\d+f)").unwrap();
     let plain = text.replace("%%", "");
-    let captures: Vec<_> = regex.captures_iter(&plain).collect();
+    let captures: Vec<_> = SPECIFIERS.captures_iter(&plain).collect();
     let positional = captures.iter().filter(|c| c.get(1).is_some()).count();
     if positional != 0 && positional != captures.len() {
         return None;
@@ -60,6 +63,7 @@ pub fn catalog_errors(catalog: &Value, locales: &[String]) -> Result<Vec<String>
             .filter(|s| !s.is_empty())
             .unwrap_or(key);
         let plain = inflect.replace_all(english, "$1");
+        let wanted_specifiers = specifiers(&plain);
         for locale in locales {
             let Some(localization) = entry["localizations"].get(locale) else {
                 errors.push(format!("{key}: no {locale} translation"));
@@ -133,7 +137,7 @@ pub fn catalog_errors(catalog: &Value, locales: &[String]) -> Result<Vec<String>
                 let spelled = locale == "ar"
                     && matches!(category, Some("zero" | "one" | "two"))
                     && got == Some(vec![]);
-                if got.is_none() || (got != specifiers(&plain) && !spelled) {
+                if got.is_none() || (got != wanted_specifiers && !spelled) {
                     errors.push(format!("{label}: format specifier mismatch"));
                 }
             }
