@@ -35,6 +35,7 @@ pub struct Report {
     pub xml: String,
     pub passed: bool,
     pub executed: usize,
+    pub cases: usize,
 }
 
 pub fn junit(summary: &Value, tests: &Value) -> Result<Report> {
@@ -125,7 +126,10 @@ pub fn junit(summary: &Value, tests: &Value) -> Result<Report> {
         passed: summary["result"] == "Passed"
             && summary["failedTests"] == 0
             && summary["passedTests"].as_u64().unwrap() > 0,
-        executed: found.len(),
+        executed: found.len()
+            - summary["skippedTests"].as_u64().unwrap() as usize
+            - summary["expectedFailures"].as_u64().unwrap() as usize,
+        cases: found.len(),
     })
 }
 

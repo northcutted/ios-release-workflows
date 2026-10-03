@@ -53,6 +53,9 @@ with tempfile.TemporaryDirectory() as directory:
         assert command.returncode == 0, command.stderr
         report = json.loads(command.stdout)
         assert report['passed'] == passed
+        cases = list(ET.fromstring(xml).iter('testcase'))
+        assert report['cases'] == len(cases)
+        assert report['executed'] == sum(case.find('skipped') is None for case in cases)
         assert report['bootstrap_recoverable'] == bootstrap_failure(summary, tests)
         assert normalized(report['junit']) == normalized(xml)
 

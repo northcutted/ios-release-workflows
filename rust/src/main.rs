@@ -82,6 +82,11 @@ enum Commands {
         photo: Vec<PathBuf>,
         #[arg(long)]
         video: Vec<PathBuf>,
+        #[arg(
+            long,
+            help = "Use an app-local cache; requires a SnapshotHelper that honors IOS_RELEASE_SNAPSHOT_HOME"
+        )]
+        isolated_cache: bool,
     },
 }
 
@@ -132,7 +137,7 @@ fn run(cli: Cli) -> Result<i32> {
         let report = results::junit(&summary, &tests)?;
         println!(
             "{}",
-            json!({"passed":report.passed,"executed":report.executed,"bootstrap_recoverable":results::bootstrap_failure(&summary,&tests),"junit":report.xml})
+            json!({"passed":report.passed,"cases":report.cases,"executed":report.executed,"bootstrap_recoverable":results::bootstrap_failure(&summary,&tests),"junit":report.xml})
         );
         return Ok(0);
     }
@@ -218,6 +223,7 @@ fn run(cli: Cli) -> Result<i32> {
             output,
             photo,
             video,
+            isolated_cache,
         } => {
             let options = screenshots::Options {
                 scheme,
@@ -236,6 +242,7 @@ fn run(cli: Cli) -> Result<i32> {
                 output,
                 photos: photo,
                 videos: video,
+                isolated_cache,
             };
             options.validate(&app)?;
             if cli.plan {

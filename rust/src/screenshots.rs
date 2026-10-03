@@ -22,6 +22,7 @@ pub struct Options {
     pub output: PathBuf,
     pub photos: Vec<PathBuf>,
     pub videos: Vec<PathBuf>,
+    pub isolated_cache: bool,
 }
 
 impl Options {
@@ -143,7 +144,7 @@ pub fn configure_test_run(path: &Path, target: &str, home: &Path) -> Result<()> 
                         .get_mut(key)
                         .and_then(plist::Value::as_dictionary_mut)
                         .context("Malformed XCTest environment")?;
-                    vars.insert("SIMULATOR_HOST_HOME".into(), home.into());
+                    vars.insert("IOS_RELEASE_SNAPSHOT_HOME".into(), home.into());
                 }
                 *count += 1;
             }
@@ -159,7 +160,7 @@ pub fn configure_test_run(path: &Path, target: &str, home: &Path) -> Result<()> 
                     node.get_mut(key)
                         .and_then(plist::Value::as_dictionary_mut)
                         .context("Malformed XCTest environment")?
-                        .insert("SIMULATOR_HOST_HOME".into(), home.into());
+                        .insert("IOS_RELEASE_SNAPSHOT_HOME".into(), home.into());
                 }
                 *count += 1;
             }
@@ -191,6 +192,12 @@ pub fn configure_test_run(path: &Path, target: &str, home: &Path) -> Result<()> 
 
 pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result<()> {
     options.validate(app)?;
+    ensure!(
+        options.isolated_cache
+            || (std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+                && std::env::var("RUNNER_ENVIRONMENT").as_deref() == Ok("github-hosted")),
+        "Legacy SnapshotHelper capture requires a disposable GitHub-hosted runner; --isolated-cache requires a helper that reads IOS_RELEASE_SNAPSHOT_HOME"
+    );
     let output = app.root.join(&options.output);
     fsutil::confined(&app.root, &app.root.join("build"))?;
     fsutil::confined(&app.root, &output)?;
@@ -203,6 +210,14 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
     fsutil::confined(&app.root, &job)?;
     fsutil::confined(&app.root, &output)?;
     fs::create_dir_all(&job)?;
+    let legacy_cache = if options.isolated_cache {
+        None
+    } else {
+        Some(LegacyCache::claim(
+            Path::new(&std::env::var_os("HOME").context("Missing host home")?),
+            &job.join("legacy-snapshot-cache"),
+        )?)
+    };
     // A failed run must not expose previous captures as current output. Retain
     // them in the evidence directory rather than deleting them.
     if output.exists() {
@@ -217,7 +232,10 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
             .get(device)
             .context("Missing screenshot device")?;
         let home = job.join(id).join("host-home");
-        let cache = home.join("Library/Caches/tools.fastlane");
+        let cache = legacy_cache
+            .as_ref()
+            .map(|cache| cache.path.clone())
+            .unwrap_or_else(|| home.join("Library/Caches/tools.fastlane"));
         fs::create_dir_all(cache.join("screenshots"))?;
         let products = job.join(id).join("derived-data");
         simulator::prepare(
@@ -366,7 +384,7 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
     }
     fsutil::json(
         &job.join("capture.json"),
-        &json!({"schema_version":1,"captures":records,"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok()}),
+        &json!({"schema_version":1,"captures":records,"cache_mode":if options.isolated_cache {"isolated"} else {"legacy-host"},"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok()}),
     )?;
     fs::create_dir_all(
         output
@@ -415,7 +433,53 @@ struct RecoveryRecord(Option<PathBuf>);
 impl Drop for RecoveryRecord {
     fn drop(&mut self) {
         if let Some(path) = &self.0 {
-            let _ = fsutil::json(path, &json!({"status":"failed","reuse_build":true}));
+            let mut record = fs::read(path)
+                .ok()
+                .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok())
+                .unwrap_or_else(|| json!({"reuse_build":true}));
+            record["status"] = json!("failed");
+            let _ = fsutil::json(path, &record);
+        }
+    }
+}
+
+// XCTest controls SIMULATOR_HOST_HOME itself. Existing SnapshotHelper versions
+// therefore require the real host cache. Claim it only on a disposable host,
+// refuse existing data, and retain this job's directory on every exit path.
+pub struct LegacyCache {
+    pub path: PathBuf,
+    retained: PathBuf,
+}
+impl LegacyCache {
+    pub fn claim(home: &Path, retained: &Path) -> Result<Self> {
+        let home = home.canonicalize()?;
+        let parent = home.join("Library/Caches");
+        fsutil::confined(&home, &parent)?;
+        fs::create_dir_all(&parent)?;
+        ensure!(
+            parent.canonicalize()?.starts_with(&home),
+            "Host cache escapes the host home"
+        );
+        let path = parent.join("tools.fastlane");
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&path).context(
+            "SnapshotHelper cache already exists; refusing to alter another capture's files",
+        )?;
+        Ok(Self {
+            path,
+            retained: retained.to_owned(),
+        })
+    }
+}
+impl Drop for LegacyCache {
+    fn drop(&mut self) {
+        if let Err(error) = fs::rename(&self.path, &self.retained) {
+            eprintln!("Could not retain owned SnapshotHelper cache: {error}");
         }
     }
 }

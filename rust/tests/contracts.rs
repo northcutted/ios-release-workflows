@@ -113,7 +113,8 @@ fn junit_preserves_failed_skipped_and_expected_cases() {
     let (summary, tree) = test_results(&["Passed", "Failed", "Skipped", "Expected Failure"]);
     let report = results::junit(&summary, &tree).unwrap();
     assert!(!report.passed);
-    assert_eq!(report.executed, 4);
+    assert_eq!(report.cases, 4);
+    assert_eq!(report.executed, 2);
     assert_eq!(report.xml.matches("<failure ").count(), 1);
     assert_eq!(report.xml.matches("<skipped ").count(), 2);
     assert!(report.xml.contains("Suite &lt;&amp;&quot;"));
@@ -324,7 +325,10 @@ fn xctestrun_environment_is_targeted_in_both_formats() {
         fs::write(&path, xml).unwrap();
         screenshots::configure_test_run(&path, "Tests", Path::new("/isolated/host-home")).unwrap();
         let text = fs::read_to_string(&path).unwrap();
-        assert_eq!(text.matches("<key>SIMULATOR_HOST_HOME</key>").count(), 2);
+        assert_eq!(
+            text.matches("<key>IOS_RELEASE_SNAPSHOT_HOME</key>").count(),
+            2
+        );
         assert!(text.contains("/isolated/host-home"));
     }
     assert!(screenshots::configure_test_run(&path, "MissingTarget", Path::new("/unused")).is_err());
@@ -341,6 +345,7 @@ fn screenshot_capture_is_unsigned_and_reuses_a_compiled_test_run() {
         output: "build/capture/images".into(),
         photos: vec![],
         videos: vec![],
+        isolated_cache: false,
     };
     options.validate(&app).unwrap();
     let build = args(&screenshots::build_step(&app, &options, ID, Path::new("products")).unwrap());
@@ -681,4 +686,65 @@ fn public_diagnostics_work_without_app_configuration() {
     assert!(execute(&["doctor"]).status.success());
     assert!(execute(&["qa", "--help"]).status.success());
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn legacy_snapshot_cache_is_exclusively_owned_and_retained() {
+    let home = tempfile::tempdir().unwrap();
+    let evidence = tempfile::tempdir().unwrap();
+    let retained = evidence.path().join("cache");
+    {
+        let cache = screenshots::LegacyCache::claim(home.path(), &retained).unwrap();
+        fs::write(cache.path.join("language.txt"), "en-US").unwrap();
+        assert!(
+            screenshots::LegacyCache::claim(home.path(), &evidence.path().join("other")).is_err()
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(retained.join("language.txt")).unwrap(),
+        "en-US"
+    );
+    assert!(!home.path().join("Library/Caches/tools.fastlane").exists());
+    fs::create_dir(home.path().join("Library/Caches/tools.fastlane")).unwrap();
+    fs::write(
+        home.path().join("Library/Caches/tools.fastlane/keep"),
+        "existing",
+    )
+    .unwrap();
+    assert!(
+        screenshots::LegacyCache::claim(home.path(), &evidence.path().join("refused")).is_err()
+    );
+    assert_eq!(
+        fs::read_to_string(home.path().join("Library/Caches/tools.fastlane/keep")).unwrap(),
+        "existing"
+    );
+}
+
+#[test]
+fn legacy_capture_refuses_local_execution_before_launching_tools() {
+    let (_dir, app) = fixture();
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_ios-release"))
+        .args([
+            "--app-root",
+            app.root.to_str().unwrap(),
+            "--config",
+            "app.json",
+            "screenshots",
+            "--scheme",
+            "Screenshots",
+            "--test-target",
+            "UITests",
+            "--languages",
+            "en-US",
+            "--devices",
+            "iPhone 18 Pro Max",
+        ])
+        .env_remove("GITHUB_ACTIONS")
+        .env_remove("RUNNER_ENVIRONMENT")
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("disposable GitHub-hosted runner"));
+    assert!(!app.root.join("build").exists());
 }
