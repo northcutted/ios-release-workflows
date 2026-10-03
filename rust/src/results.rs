@@ -81,7 +81,10 @@ pub fn junit(summary: &Value, tests: &Value) -> Result<Report> {
             .as_str()
             .or(node["name"].as_str())
             .context("Missing XCTest case identity")?;
-        let duration = node["durationInSeconds"].as_f64().unwrap_or(0.0);
+        let duration = match node.get("durationInSeconds") {
+            Some(value) => value.as_f64().context("Invalid XCTest case duration")?,
+            None => 0.0,
+        };
         ensure!(
             duration.is_finite() && duration >= 0.0,
             "Invalid XCTest case duration"
@@ -128,6 +131,19 @@ pub fn junit(summary: &Value, tests: &Value) -> Result<Report> {
 
 fn escape(value: &str) -> String {
     value
+        .chars()
+        .map(|c| {
+            if c == '\t'
+                || c == '\n'
+                || c == '\r'
+                || (c >= ' ' && c != '\u{fffe}' && c != '\u{ffff}')
+            {
+                c
+            } else {
+                '\u{fffd}'
+            }
+        })
+        .collect::<String>()
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

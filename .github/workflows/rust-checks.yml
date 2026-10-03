@@ -80,10 +80,9 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal
           cargo build --locked --release
       - name: Run the immutable consumer's native test target
-        run: platform/rust/target/release/ios-release --app-root consumer qa "$CHECK"
+        run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa "$CHECK"
         env:
           CHECK: ${{ matrix.check }}
-          GITHUB_REPOSITORY: northcutted/picstrip
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
           TEST_WORKERS: "1"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -127,13 +126,12 @@ jobs:
           cargo build --locked --release
       - name: Capture English and Arabic using one device and one compiled test run
         run: >-
-          platform/rust/target/release/ios-release --app-root consumer screenshots
+          GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer screenshots
           --scheme PicStripScreenshots --test-target PicStripUITests
           --only-testing PicStripUITests/PicStripUITests/testAllScreenshots
           --devices "$DEVICE" --languages en-US,ar-SA
         env:
           DEVICE: ${{ matrix.device }}
-          GITHUB_REPOSITORY: northcutted/picstrip
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()

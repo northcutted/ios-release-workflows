@@ -123,6 +123,12 @@ pub fn resolve_inventory(
             .context("Missing simulator UUID")?;
         crate::simulator::validate_id(id)?;
         ensure!(
+            !result
+                .values()
+                .any(|existing: &String| existing.eq_ignore_ascii_case(id)),
+            "Configured simulator names resolve to the same UUID"
+        );
+        ensure!(
             result.insert(name.clone(), id.to_owned()).is_none(),
             "Duplicate requested simulator"
         );

@@ -156,6 +156,12 @@ fn bool_value(value: &plist::Value, key: &str) -> Option<bool> {
     value.as_dictionary()?.get(key)?.as_boolean()
 }
 
+fn false_or_absent(value: &plist::Value, key: &str) -> bool {
+    value
+        .as_dictionary()
+        .is_some_and(|dict| !dict.contains_key(key) || bool_value(value, key) == Some(false))
+}
+
 pub fn uuid_set(output: &str) -> Result<BTreeSet<String>> {
     let mut ids = BTreeSet::new();
     for line in output.lines().filter(|v| v.starts_with("UUID:")) {
@@ -315,11 +321,9 @@ pub fn verify(
             "Expired provisioning profile"
         );
         ensure!(
-            !dict
-                .get("ProvisionedDevices")
-                .and_then(plist::Value::as_array)
-                .is_some_and(|v| !v.is_empty())
-                && bool_value(&profile, "ProvisionsAllDevices") != Some(true),
+            dict.get("ProvisionedDevices")
+                .is_none_or(|v| v.as_array().is_some_and(|devices| devices.is_empty()))
+                && false_or_absent(&profile, "ProvisionsAllDevices"),
             "Not an App Store profile"
         );
         let entitlements = checked(
@@ -342,7 +346,7 @@ pub fn verify(
                 == format!("{}.{id}", app.text("team_id")?)
                 && text(&entitlements, "com.apple.developer.team-identifier")?
                     == app.text("team_id")?
-                && bool_value(&entitlements, "get-task-allow") != Some(true),
+                && false_or_absent(&entitlements, "get-task-allow"),
             "Invalid signing identity/debug entitlement"
         );
         let expected: Value = serde_json::to_value(&entitlements)?;

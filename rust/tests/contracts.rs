@@ -487,3 +487,176 @@ fn native_executor_keeps_exit_status_and_inspected_output() {
     assert_eq!(output.status, 65);
     assert_eq!(output.stdout, "value");
 }
+
+fn plist_bytes(value: &plist::Value) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    value.to_writer_xml(&mut bytes).unwrap();
+    bytes
+}
+fn plist_dict(values: Vec<(&str, plist::Value)>) -> plist::Value {
+    let mut dict = plist::Dictionary::new();
+    for (key, value) in values {
+        dict.insert(key.into(), value);
+    }
+    dict.into()
+}
+struct SigningFake {
+    entitlements: plist::Value,
+    profile: plist::Value,
+    wrong_symbols: bool,
+    wrong_certificate: bool,
+}
+impl Executor for SigningFake {
+    fn run(&mut self, step: &Step, _root: &Path, _log: Option<&Path>) -> Result<Output> {
+        let argv = args(step);
+        let stdout = match step.program.as_str() {
+            "security" => String::from_utf8(plist_bytes(&self.profile))?,
+            "codesign" if argv.contains(&"--entitlements".into()) => {
+                String::from_utf8(plist_bytes(&self.entitlements))?
+            }
+            "codesign" => {
+                if let Some(prefix) = argv
+                    .iter()
+                    .find_map(|value| value.strip_prefix("--extract-certificates="))
+                {
+                    fs::write(
+                        format!("{prefix}0"),
+                        if self.wrong_certificate {
+                            b"wrong".as_slice()
+                        } else {
+                            b"leaf".as_slice()
+                        },
+                    )?;
+                }
+                String::new()
+            }
+            "xcrun" => {
+                let id = if self.wrong_symbols && !argv.last().unwrap().ends_with(".dSYM") {
+                    "11111111-1111-1111-1111-111111111111"
+                } else {
+                    ID
+                };
+                format!("UUID: {id} (arm64) executable")
+            }
+            _ => panic!("Unexpected signing operation"),
+        };
+        Ok(Output { status: 0, stdout })
+    }
+}
+fn signed_fixture() -> (tempfile::TempDir, App, PathBuf, SigningFake) {
+    use std::{io::Write, time::SystemTime};
+    let (dir, app) = fixture();
+    let info = plist_dict(vec![
+        ("CFBundleIdentifier", "org.example.application".into()),
+        ("CFBundleShortVersionString", "1.7.0".into()),
+        ("CFBundleVersion", "77.1".into()),
+        ("DTXcodeBuild", "27A266a".into()),
+        ("DTSDKName", "iphoneos27.0".into()),
+        ("CFBundleExecutable", "Application".into()),
+        ("ITSAppUsesNonExemptEncryption", false.into()),
+    ]);
+    let privacy = plist_dict(vec![
+        ("NSPrivacyTracking", false.into()),
+        (
+            "NSPrivacyAccessedAPITypes",
+            Vec::<plist::Value>::new().into(),
+        ),
+    ]);
+    let entitlements = plist_dict(vec![
+        (
+            "application-identifier",
+            "ABCDE12345.org.example.application".into(),
+        ),
+        ("com.apple.developer.team-identifier", "ABCDE12345".into()),
+        ("get-task-allow", false.into()),
+    ]);
+    let profile = plist_dict(vec![
+        ("UUID", ID.into()),
+        (
+            "ExpirationDate",
+            plist::Date::from(SystemTime::now() + Duration::from_secs(3600)).into(),
+        ),
+        ("Entitlements", entitlements.clone()),
+        (
+            "DeveloperCertificates",
+            vec![plist::Value::Data(b"leaf".to_vec())].into(),
+        ),
+    ]);
+    fs::create_dir_all(
+        app.root
+            .join("build/application.xcarchive/dSYMs/Application.app.dSYM"),
+    )
+    .unwrap();
+    let ipa = app.root.join("build/application.ipa");
+    let mut zip = zip::ZipWriter::new(fs::File::create(&ipa).unwrap());
+    for (name, bytes) in [
+        ("Info.plist", plist_bytes(&info)),
+        ("PrivacyInfo.xcprivacy", plist_bytes(&privacy)),
+        ("Application", b"native executable".to_vec()),
+        ("embedded.mobileprovision", b"signed cms".to_vec()),
+    ] {
+        zip.start_file(
+            format!("Payload/Application.app/{name}"),
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+        zip.write_all(&bytes).unwrap();
+    }
+    zip.finish().unwrap();
+    (
+        dir,
+        app,
+        ipa,
+        SigningFake {
+            entitlements,
+            profile,
+            wrong_symbols: false,
+            wrong_certificate: false,
+        },
+    )
+}
+#[test]
+fn exported_archive_requires_authorized_certificate_and_matching_symbols() {
+    let (_dir, app, ipa, mut fake) = signed_fixture();
+    let inventory = archive::verify(&app, &ipa, "1.7.0", "77.1", &mut fake).unwrap();
+    assert_eq!(inventory[0]["bundle_id"], "org.example.application");
+    assert!(archive::verify(&app, &ipa, "1.8.0", "77.1", &mut fake).is_err());
+    fake.wrong_symbols = true;
+    assert!(
+        archive::verify(&app, &ipa, "1.7.0", "77.1", &mut fake)
+            .unwrap_err()
+            .to_string()
+            .contains("dSYMs")
+    );
+    fake.wrong_symbols = false;
+    fake.wrong_certificate = true;
+    assert!(
+        archive::verify(&app, &ipa, "1.7.0", "77.1", &mut fake)
+            .unwrap_err()
+            .to_string()
+            .contains("certificate")
+    );
+}
+#[test]
+fn release_export_rejects_debug_profiles_and_malformed_entitlements() {
+    let (_dir, app, ipa, mut fake) = signed_fixture();
+    fake.entitlements
+        .as_dictionary_mut()
+        .unwrap()
+        .insert("get-task-allow".into(), "true".into());
+    assert!(archive::verify(&app, &ipa, "1.7.0", "77.1", &mut fake).is_err());
+    fake.entitlements
+        .as_dictionary_mut()
+        .unwrap()
+        .insert("get-task-allow".into(), false.into());
+    fake.profile
+        .as_dictionary_mut()
+        .unwrap()
+        .insert("ProvisionedDevices".into(), vec!["device".into()].into());
+    assert!(
+        archive::verify(&app, &ipa, "1.7.0", "77.1", &mut fake)
+            .unwrap_err()
+            .to_string()
+            .contains("App Store")
+    );
+}

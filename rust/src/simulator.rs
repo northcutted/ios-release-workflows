@@ -152,7 +152,13 @@ pub fn inspect(
                 &output
                     .parent()
                     .context("Missing assessment parent")?
-                    .join(format!("{report}.json")),
+                    .join(format!(
+                        "{}-{report}.json",
+                        output
+                            .file_stem()
+                            .context("Missing assessment name")?
+                            .to_string_lossy()
+                    )),
                 raw.as_bytes(),
             )?;
             reports.push(serde_json::from_str::<Value>(&raw)?);
