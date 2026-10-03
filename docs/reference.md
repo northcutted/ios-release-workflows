@@ -50,6 +50,7 @@ Platform: northcutted/ios-release-workflows.
 | [Prepare verified candidate](#prepare-verified-candidate) | [prepare.yml](../.github/workflows/prepare.yml) | <code>workflow_call</code> |
 | [Promote exact candidate](#promote-exact-candidate) | [promote.yml](../.github/workflows/promote.yml) | <code>workflow_call</code> |
 | [Release selected build](#release-selected-build) | [release.yml](../.github/workflows/release.yml) | <code>workflow_call</code> |
+| [Rust CLI checks](#rust-cli-checks) | [rust-checks.yml](../.github/workflows/rust-checks.yml) | <code>pull_request</code>, <code>push</code>, <code>workflow_dispatch</code> |
 
 Jobs below belong to the checked-in workflows. A linked reusable workflow expands into its own jobs. A dash means no explicit override; GitHub dependency/default behavior still applies. Conditions are shown verbatim, not evaluated here.
 
@@ -276,3 +277,29 @@ Named secrets: <code>APP_STORE_CONNECT_API_KEY_CONTENT</code>, <code>APP_STORE_C
 | <code>promote</code><br>Upload or reuse verified build | <code>resolve</code> | [.github/workflows/promote.yml](../.github/workflows/promote.yml) | <code>needs.resolve.outputs.kind == 'candidate'</code> |
 | <code>deploy-existing</code><br>Request protected store deployment | <code>resolve</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>release-publishing</code> | <code>needs.resolve.outputs.kind == 'published'</code> |
 | <code>summary</code><br>Release next step | <code>resolve</code>, <code>promote</code>, <code>deploy-existing</code> | <code>ubuntu-24.04</code>; 5 min | <code>always() &amp;&amp; needs.resolve.result == 'success' &amp;&amp; (needs.promote.result == 'success' &#124;&#124; needs.deploy-existing.result == 'success')</code> |
+
+### Rust CLI checks
+
+[Source](../.github/workflows/rust-checks.yml) · [Actions](https://github.com/northcutted/ios-release-workflows/actions/workflows/rust-checks.yml)
+
+Triggers (cron expressions use UTC):
+
+```json
+{
+  "pull_request": {},
+  "push": {
+    "branches": [
+      "main"
+    ]
+  },
+  "workflow_dispatch": {}
+}
+```
+
+Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"read"}</code>.
+
+| Job | Needs | Execution | Condition |
+| --- | --- | --- | --- |
+| <code>contracts</code><br>Rust contracts (${{ matrix.runner }}) | — | <code>${{ matrix.runner }}</code>; 30 min | — |
+| <code>native-tests</code><br>PicStrip Rust ${{ matrix.check }} | — | <code>${{ matrix.runner }}</code>; 60 min | — |
+| <code>screenshots</code><br>PicStrip Rust screenshots (${{ matrix.device }}) | — | <code>xcode-27</code>; 90 min | — |

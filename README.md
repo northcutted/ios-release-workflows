@@ -9,6 +9,7 @@ Build once, verify the candidate, and deliberately promote the same IPA to TestF
 | Understand security and ownership | [Architecture](docs/architecture.md) |
 | Find exact workflow inputs, outputs, secrets or commands | [Generated reference](docs/reference.md) · [JSON](docs/reference.json) |
 | Change shared code or documentation | [Maintenance](docs/maintenance.md) |
+| Evaluate the standalone Rust build CLI | [Rust CLI preview](docs/rust-cli.md) |
 
 ```mermaid
 flowchart LR
@@ -27,6 +28,8 @@ flowchart LR
 App repositories keep their release operating guide, caller workflows, configuration, metadata and screenshots. This repository owns reusable implementation and its documentation. Pin callers and tools to one full reviewed commit. Link platform docs at that same revision so instructions and implementation stay aligned.
 
 The Python package exposes one `ios-release` interface for setup, diagnostics, checks, documentation and builds. Native analysis/tests use `xcodebuild` and validated xcresults. Fastlane remains behind the Apple adapter for signing, archive/export, screenshot capture and delivery. Python and Ruby dependencies are locked here; callers require no Node installation or npm manifest.
+
+An additive Rust preview implements native QA, local archive/export and screenshot capture in one compiled executable. It is explicitly invoked and does not change consumer workflow defaults or the protected release path.
 
 ## Work on the platform
 
