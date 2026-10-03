@@ -1,0 +1,190 @@
+name: Rust CLI checks
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  contracts:
+    name: Rust contracts (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install the pinned build toolchain
+        working-directory: rust
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
+      - name: Format, lint, and run native regression contracts
+        working-directory: rust
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+      - name: Build a standalone binary and compare deployed contracts
+        working-directory: rust
+        run: |
+          cargo build --locked --release
+          target/release/ios-release --commands-json
+          target/release/ios-release doctor
+          python3 tests/parity.py target/release/ios-release
+      - name: Package the tested binary
+        working-directory: rust
+        run: |
+          mkdir -p dist
+          cp target/release/ios-release dist/ios-release
+          python3 - <<'PY'
+          import hashlib, pathlib
+          binary = pathlib.Path('dist/ios-release')
+          pathlib.Path('dist/SHA256SUMS').write_text(hashlib.sha256(binary.read_bytes()).hexdigest() + '  ios-release\n')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ios-release-rust-${{ runner.os }}-${{ runner.arch }}
+          path: rust/dist/
+          if-no-files-found: error
+          retention-days: 14
+  native-tests:
+    name: PicStrip Rust ${{ matrix.check }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: xcode-27
+            check: test
+          - runner: macos-26
+            check: test-compatibility
+          - runner: xcode-27
+            check: analyze
+          - runner: macos-26
+            check: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          path: platform
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: northcutted/picstrip
+          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          persist-credentials: false
+          path: consumer
+      - name: Build the Rust CLI from this reviewed source
+        working-directory: platform/rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          cargo build --locked --release
+      - name: Install verified SwiftLint
+        if: matrix.check == 'lint'
+        run: bash platform/scripts/ci/install_swiftlint.sh
+      - name: Run the immutable consumer's configured QA check
+        run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa "$CHECK"
+        env:
+          CHECK: ${{ matrix.check }}
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          TEST_WORKERS: "1"
+      - name: Audit the immutable consumer's catalogs
+        if: always() && matrix.check == 'lint'
+        run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa localization
+        env:
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-picstrip-qa-${{ matrix.check }}
+          path: |
+            consumer/qa-results/
+            consumer/build/test_output/
+            consumer/build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
+  qa-evidence:
+    name: PicStrip Rust QA evidence compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: native-tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          path: platform
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: northcutted/picstrip
+          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          persist-credentials: false
+          path: consumer
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: rust-picstrip-qa-*
+          path: consumer/
+          merge-multiple: true
+      - name: Validate all native QA evidence with the deployed release contract
+        run: >-
+          GITHUB_REPOSITORY=northcutted/picstrip IOS_RELEASE_CONFIG=consumer/.github/ios-release.json
+          python3 platform/scripts/ci/evidence.py qa consumer/qa-results
+          --output build/rust-qa --source "$SOURCE_SHA"
+        env:
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-picstrip-qa-evidence
+          path: build/rust-qa/
+          if-no-files-found: error
+          retention-days: 14
+  screenshots:
+    name: PicStrip Rust screenshots (${{ matrix.device }})
+    runs-on: xcode-27
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: iPhone 18 Pro Max
+            artifact: iphone
+          - device: iPad Pro 13-inch (M5)
+            artifact: ipad
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          path: platform
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: northcutted/picstrip
+          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          persist-credentials: false
+          path: consumer
+          lfs: true
+      - name: Build the Rust CLI from this reviewed source
+        working-directory: platform/rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          cargo build --locked --release
+      - name: Capture English and Arabic using one device and one compiled test run
+        run: >-
+          GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer screenshots
+          --scheme PicStripScreenshots --test-target PicStripUITests
+          --only-testing PicStripUITests/PicStripUITests/testAllScreenshots
+          --devices "$DEVICE" --languages en-US,ar-SA
+        env:
+          DEVICE: ${{ matrix.device }}
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-picstrip-screenshots-${{ matrix.artifact }}
+          path: |
+            consumer/build/rust-screenshots/
+            consumer/build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
