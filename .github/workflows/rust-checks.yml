@@ -63,6 +63,10 @@ jobs:
             check: test
           - runner: macos-26
             check: test-compatibility
+          - runner: xcode-27
+            check: analyze
+          - runner: macos-26
+            check: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -79,20 +83,62 @@ jobs:
         run: |
           rustup toolchain install 1.98.1 --profile minimal
           cargo build --locked --release
-      - name: Run the immutable consumer's native test target
+      - name: Install verified SwiftLint
+        if: matrix.check == 'lint'
+        run: bash platform/scripts/ci/install_swiftlint.sh
+      - name: Run the immutable consumer's configured QA check
         run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa "$CHECK"
         env:
           CHECK: ${{ matrix.check }}
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
           TEST_WORKERS: "1"
+      - name: Audit the immutable consumer's catalogs
+        if: always() && matrix.check == 'lint'
+        run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa localization
+        env:
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: rust-picstrip-${{ matrix.check }}
+          name: rust-picstrip-qa-${{ matrix.check }}
           path: |
             consumer/qa-results/
             consumer/build/test_output/
             consumer/build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
+  qa-evidence:
+    name: PicStrip Rust QA evidence compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: native-tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          path: platform
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: northcutted/picstrip
+          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          persist-credentials: false
+          path: consumer
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: rust-picstrip-qa-*
+          path: consumer/
+          merge-multiple: true
+      - name: Validate all native QA evidence with the deployed release contract
+        run: >-
+          GITHUB_REPOSITORY=northcutted/picstrip IOS_RELEASE_CONFIG=consumer/.github/ios-release.json
+          python3 platform/scripts/ci/evidence.py qa consumer/qa-results
+          --output build/rust-qa --source "$SOURCE_SHA"
+        env:
+          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-picstrip-qa-evidence
+          path: build/rust-qa/
           if-no-files-found: error
           retention-days: 14
   screenshots:

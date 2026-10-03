@@ -931,6 +931,20 @@
           "secret_names": []
         },
         {
+          "id": "qa-evidence",
+          "name": "PicStrip Rust QA evidence compatibility",
+          "needs": [
+            "native-tests"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
           "id": "screenshots",
           "name": "PicStrip Rust screenshots (${{ matrix.device }})",
           "needs": [],

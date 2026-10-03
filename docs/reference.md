@@ -302,4 +302,5 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | --- | --- | --- | --- |
 | <code>contracts</code><br>Rust contracts (${{ matrix.runner }}) | — | <code>${{ matrix.runner }}</code>; 30 min | — |
 | <code>native-tests</code><br>PicStrip Rust ${{ matrix.check }} | — | <code>${{ matrix.runner }}</code>; 60 min | — |
+| <code>qa-evidence</code><br>PicStrip Rust QA evidence compatibility | <code>native-tests</code> | <code>ubuntu-24.04</code>; 30 min | — |
 | <code>screenshots</code><br>PicStrip Rust screenshots (${{ matrix.device }}) | — | <code>xcode-27</code>; 90 min | — |
