@@ -11,7 +11,8 @@
     ".github/workflows/platform-tests.yml",
     ".github/workflows/prepare.yml",
     ".github/workflows/promote.yml",
-    ".github/workflows/release.yml"
+    ".github/workflows/release.yml",
+    ".github/workflows/rust-checks.yml"
   ],
   "platform": {
     "repository": "northcutted/ios-release-workflows"
@@ -880,6 +881,78 @@
           "uses": null,
           "environment": null,
           "timeout_minutes": 5,
+          "permissions": null,
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/rust-checks.yml",
+      "name": "Rust CLI checks",
+      "triggers": {
+        "pull_request": {},
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_dispatch": {}
+      },
+      "inputs": {},
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "contracts",
+          "name": "Rust contracts (${{ matrix.runner }})",
+          "needs": [],
+          "condition": null,
+          "runner": "${{ matrix.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "native-tests",
+          "name": "PicStrip Rust ${{ matrix.check }}",
+          "needs": [],
+          "condition": null,
+          "runner": "${{ matrix.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 60,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "qa-evidence",
+          "name": "PicStrip Rust QA evidence compatibility",
+          "needs": [
+            "native-tests"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "screenshots",
+          "name": "PicStrip Rust screenshots (${{ matrix.device }})",
+          "needs": [],
+          "condition": null,
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 90,
           "permissions": null,
           "secret_names": []
         }
