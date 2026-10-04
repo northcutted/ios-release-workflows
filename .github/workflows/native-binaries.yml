@@ -41,6 +41,7 @@ jobs:
           cp target/release/ios-release "dist/ios-release-$ASSET"
         env:
           ASSET: ${{ matrix.asset }}
+          IOS_RELEASE_BUILD_REVISION: ${{ github.sha }}
           IOS_RELEASE_DISTRIBUTION_VERSION: ${{ inputs.version }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
