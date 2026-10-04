@@ -360,7 +360,30 @@ fn verify_attestation(
 pub fn validate_invocation(result: &Value, repo: &str, run: u64) -> Result<()> {
     let prefix =
         format!("https://github.com/{repo}/actions/runs/{run}/attempts/").to_ascii_lowercase();
-    ensure!(result.as_array().is_some_and(|values|values.iter().any(|v|v["verificationResult"]["statement"]["predicate"]["runDetails"]["metadata"]["invocationId"].as_str().is_some_and(|id|id.to_ascii_lowercase().strip_prefix(&prefix).is_some_and(|n|!n.is_empty()&&n.bytes().all(|c|c.is_ascii_digit()))))),"Verified attestation does not identify the selected workflow run");
+    ensure!(
+        result
+            .as_array()
+            .is_some_and(|values| values.iter().any(|v| {
+                let proof = &v["verificationResult"];
+                // This certificate field comes from GitHub's OIDC token; predicate
+                // metadata alone can be supplied by the workflow that signs it.
+                proof["signature"]["certificate"]["runInvocationURI"]
+                    .as_str()
+                    .is_some_and(|id| {
+                        id.to_ascii_lowercase()
+                        .strip_prefix(&prefix)
+                        .is_some_and(|attempt| {
+                            attempt.parse::<u64>().is_ok_and(|n| n > 0)
+                                && attempt.bytes().all(|c| c.is_ascii_digit())
+                        })
+                        && proof["statement"]["predicate"]["runDetails"]["metadata"]
+                            ["invocationId"]
+                            .as_str()
+                            .is_some_and(|claim| claim.eq_ignore_ascii_case(id))
+                    })
+            })),
+        "Verified attestation does not identify the selected workflow run"
+    );
     Ok(())
 }
 fn download(

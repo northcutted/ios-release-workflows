@@ -76,11 +76,17 @@ fn authenticated_run_and_invocation_must_match_the_selected_preparation() {
         wrong[key] = json!(invalid);
         assert!(validate_run(&wrong, "owner/app", 42).is_err());
     }
-    let proof = json!([{"verificationResult":{"statement":{"predicate":{"runDetails":{"metadata":{"invocationId":"https://github.com/Owner/App/actions/runs/42/attempts/1"}}}}}}]);
+    let proof = json!([{"verificationResult":{"signature":{"certificate":{"runInvocationURI":"https://github.com/Owner/App/actions/runs/42/attempts/1"}},"statement":{"predicate":{"runDetails":{"metadata":{"invocationId":"https://github.com/Owner/App/actions/runs/42/attempts/1"}}}}}}]);
     assert!(validate_invocation(&proof, "owner/app", 42).is_ok());
     assert!(validate_invocation(&proof, "owner/app", 43).is_err());
     assert!(validate_invocation(&proof, "owner/other", 42).is_err());
     assert!(validate_invocation(&json!([]), "owner/app", 42).is_err());
+    let mut forged = proof.clone();
+    forged[0]["verificationResult"]["signature"]["certificate"]["runInvocationURI"] =
+        json!("https://github.com/Owner/App/actions/runs/43/attempts/1");
+    assert!(validate_invocation(&forged, "owner/app", 42).is_err());
+    forged[0]["verificationResult"]["signature"] = json!({});
+    assert!(validate_invocation(&forged, "owner/app", 42).is_err());
 }
 fn local_metadata(app: &App, locale: &str) {
     let folder = app.path("metadata_path").unwrap().join(locale);
