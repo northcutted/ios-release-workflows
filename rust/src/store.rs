@@ -120,6 +120,18 @@ impl Release {
         let archived: Value =
             serde_json::from_slice(&std::fs::read(directory.join("archive.json"))?)?;
         let qa: Value = serde_json::from_slice(&std::fs::read(directory.join("qa.json"))?)?;
+        let sealed_app = App::load(&directory, Path::new("app.json"))?;
+        crate::release::validate_inventory(&sealed_app, &archived)?;
+        ensure!(
+            sealed_app.config["team_id"] == manifest["team_id"]
+                && sealed_app.config["app_store"]["bundle_id"] == manifest["bundle_id"],
+            "Sealed configuration belongs to another app/team"
+        );
+        ensure!(
+            archived["source_sha"].as_str().unwrap_or("local") == manifest["source_sha"]
+                && archived["run_id"] == manifest["run_id"],
+            "Manifest and archive source/run identities differ"
+        );
         ensure!(
             archived["version"] == manifest["version"]
                 && archived["build_number"] == manifest["build_number"]
@@ -134,8 +146,11 @@ impl Release {
         );
         let checks = qa.as_object().context("Release QA evidence missing")?;
         ensure!(
-            checks.contains_key("test"),
-            "Release has no app test evidence"
+            sealed_app
+                .qa_checks()?
+                .iter()
+                .all(|c| checks.contains_key(c)),
+            "Release has missing configured QA evidence"
         );
         for (name, value) in checks {
             ensure!(

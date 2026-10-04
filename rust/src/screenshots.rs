@@ -525,6 +525,15 @@ pub fn validate_png(app: &App, device: &str, path: &Path) -> Result<()> {
         u32::from_be_bytes(header[16..20].try_into()?),
         u32::from_be_bytes(header[20..24].try_into()?),
     ];
+    if app.config["schema_version"] == 2 && !app.config["screenshot_classes"].is_object() {
+        let kind = crate::metadata::display_type(size[0], size[1])?;
+        ensure!(
+            (device.starts_with("iPhone") && kind.starts_with("APP_IPHONE"))
+                || (device.starts_with("iPad") && kind.starts_with("APP_IPAD")),
+            "Screenshot belongs to another device family"
+        );
+        return Ok(());
+    }
     let classes = app.config["screenshot_classes"]
         .as_object()
         .context("Missing screenshot dimensions policy")?;

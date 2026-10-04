@@ -8,6 +8,9 @@
     ".github/workflows/ci.yml",
     ".github/workflows/deploy.yml",
     ".github/workflows/native-adoption.yml",
+    ".github/workflows/native-app.yml",
+    ".github/workflows/native-binaries.yml",
+    ".github/workflows/native-caller.yml",
     ".github/workflows/observe.yml",
     ".github/workflows/platform-tests.yml",
     ".github/workflows/prepare.yml",
@@ -28,6 +31,10 @@
       "docs"
     ],
     "navigation": [
+      {
+        "label": "Native CLI quickstart",
+        "path": "docs/native-quickstart.md"
+      },
       {
         "label": "Start here",
         "path": "README.md"
@@ -407,6 +414,346 @@
           "environment": null,
           "timeout_minutes": 60,
           "permissions": null,
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/native-app.yml",
+      "name": "Native iOS app lifecycle",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "operation": {
+          "type": "string",
+          "default": "check"
+        },
+        "config": {
+          "type": "string",
+          "default": ".ios-release.json"
+        },
+        "app_root": {
+          "type": "string",
+          "default": "."
+        },
+        "auto_init": {
+          "type": "boolean",
+          "default": false
+        },
+        "runner": {
+          "type": "string",
+          "default": "xcode-27"
+        },
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "release_run": {
+          "type": "string",
+          "default": ""
+        },
+        "version": {
+          "type": "string",
+          "default": "1.0.0"
+        },
+        "build_number": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "secret_names": [
+        "IOS_RELEASE_API_ISSUER_ID",
+        "IOS_RELEASE_API_KEY_CONTENT",
+        "IOS_RELEASE_API_KEY_ID",
+        "IOS_RELEASE_DEMO_PASSWORD",
+        "IOS_RELEASE_SIGNING_PASSWORD"
+      ],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "check",
+          "name": "Native app QA",
+          "needs": [],
+          "condition": "inputs.operation == 'check'",
+          "runner": "${{ inputs.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 60,
+          "permissions": {
+            "contents": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "guard",
+          "name": "Require protected release controls",
+          "needs": [],
+          "condition": "inputs.operation != 'check'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "signing",
+          "name": "Reconcile owned signing assets without compiling app code",
+          "needs": [
+            "guard"
+          ],
+          "condition": "inputs.operation == 'prepare'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "native-signing-admin",
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "qa",
+          "name": "Test release inputs without signing or Apple credentials",
+          "needs": [
+            "signing"
+          ],
+          "condition": null,
+          "runner": "${{ inputs.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 60,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "build",
+          "name": "Build app with isolated signing assets",
+          "needs": [
+            "signing"
+          ],
+          "condition": null,
+          "runner": "${{ inputs.runner }}",
+          "uses": null,
+          "environment": "native-signing",
+          "timeout_minutes": 60,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "verify",
+          "name": "Verify signed IPA and matching symbols without build credentials",
+          "needs": [
+            "build",
+            "qa",
+            "signing"
+          ],
+          "condition": null,
+          "runner": "${{ inputs.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "seal",
+          "name": "Seal and attest the verified release without compiling app code",
+          "needs": [
+            "verify",
+            "qa",
+            "signing"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "select",
+          "name": "Authenticate the exact preparation before requesting Apple credentials",
+          "needs": [
+            "guard"
+          ],
+          "condition": "contains(fromJSON('[\"testflight\",\"stage\",\"metadata\",\"submit\",\"publish\",\"phase-pause\",\"phase-resume\",\"phase-complete\"]'), inputs.operation)",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "deliver",
+          "name": "Deliver verified beta or update store content",
+          "needs": [
+            "select"
+          ],
+          "condition": "contains(fromJSON('[\"testflight\",\"stage\",\"metadata\"]'), inputs.operation)",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "native-app-store",
+          "timeout_minutes": 90,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "production",
+          "name": "Owner-approved App Review or public release",
+          "needs": [
+            "select"
+          ],
+          "condition": "contains(fromJSON('[\"submit\",\"publish\",\"phase-pause\",\"phase-resume\",\"phase-complete\"]'), inputs.operation)",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "native-production",
+          "timeout_minutes": 90,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "receipt",
+          "name": "Attest operation recovery state without Apple credentials",
+          "needs": [
+            "deliver",
+            "production",
+            "select"
+          ],
+          "condition": "always() && (needs.deliver.result != 'skipped' || needs.production.result != 'skipped') && needs.select.result == 'success'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "status",
+          "name": "Read current Apple app and build status",
+          "needs": [
+            "guard"
+          ],
+          "condition": "inputs.operation == 'status'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "native-app-store",
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/native-binaries.yml",
+      "name": "Package native CLI",
+      "triggers": {
+        "workflow_dispatch": {}
+      },
+      "inputs": {},
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "binaries",
+          "name": "Build standalone binary (${{ matrix.asset }})",
+          "needs": [],
+          "condition": "github.ref == 'refs/heads/main'",
+          "runner": "${{ matrix.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "provenance",
+          "name": "Attest the tested binaries without compiling them",
+          "needs": [
+            "binaries"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/native-caller.yml",
+      "name": "Native reusable Actions rehearsal",
+      "triggers": {
+        "pull_request": {},
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_dispatch": {}
+      },
+      "inputs": {},
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "app",
+          "name": "app",
+          "needs": [],
+          "condition": null,
+          "runner": null,
+          "uses": "$/.github/workflows/native-app.yml",
+          "environment": null,
+          "timeout_minutes": null,
+          "permissions": {
+            "contents": "read",
+            "actions": "read",
+            "id-token": "write",
+            "attestations": "write",
+            "artifact-metadata": "write"
+          },
           "secret_names": []
         }
       ]

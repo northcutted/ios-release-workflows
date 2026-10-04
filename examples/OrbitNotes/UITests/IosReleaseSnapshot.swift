@@ -2,6 +2,7 @@ import XCTest
 import UIKit
 
 // App-owned scenarios call these helpers; no Fastlane runtime is required.
+@MainActor
 enum IosReleaseSnapshot {
     static var cache: URL? {
         ProcessInfo.processInfo.environment["IOS_RELEASE_SNAPSHOT_HOME"].map {

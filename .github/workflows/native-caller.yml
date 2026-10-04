@@ -1,0 +1,22 @@
+name: Native reusable Actions rehearsal
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  app:
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: $/.github/workflows/native-app.yml
+    with:
+      operation: check
+      app_root: examples/OrbitNotes
+      auto_init: true
+      platform_revision: ${{ github.sha }}

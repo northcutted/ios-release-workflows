@@ -300,7 +300,14 @@ pub fn sync_with_password(
             let name = if let Some(name) = state["profile_intents"][bundle].as_str() {
                 name.to_owned()
             } else {
-                let name = format!("ios-release {bundle} {}", uuid::Uuid::new_v4());
+                use sha2::Digest;
+                let digest = format!(
+                    "{:x}",
+                    sha2::Sha256::digest(serde_json::to_vec(&target["entitlements"])?)
+                );
+                // Stable, certificate-bound names let fresh CI runs reconcile renewals
+                // from the same encrypted private key without creating a profile per run.
+                let name = format!("ios-release {bundle} {certificate_id} {}", &digest[..16]);
                 state["profile_intents"][bundle] = json!(name);
                 vault::write(&vault_path, &state, password)?;
                 name
@@ -314,6 +321,10 @@ pub fn sync_with_password(
                     ("limit", "200"),
                 ]),
             )?;
+            let values = values
+                .into_iter()
+                .filter(|p| profile_matches(&json!({"data":p}), &bundle_id, &certificate_id))
+                .collect::<Vec<_>>();
             ensure!(values.len() <= 1, "Ambiguous owned provisioning profile");
             if let Some(value) = values.first() {
                 let live = api.request(
@@ -498,6 +509,7 @@ fn validate_profile(
                 "-inform",
                 "DER",
                 "-noverify",
+                "-binary",
                 "-in",
                 cms.to_str().unwrap(),
                 "-out",

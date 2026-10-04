@@ -48,7 +48,7 @@ fn candidate(app: &App) -> store::Release {
         b"fixture IPA bytes",
     )
     .unwrap();
-    fsutil::json(&app.root.join("build/rust-archive.json"),&json!({"version":"1.2.3","build_number":"7","inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"ipa_sha256":fsutil::sha256(&app.root.join("build/application.ipa")).unwrap()})).unwrap();
+    fsutil::json(&app.root.join("build/rust-archive.json"),&json!({"version":"1.2.3","build_number":"7","inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"ipa_sha256":fsutil::sha256(&app.root.join("build/application.ipa")).unwrap(),"applications":[{"bundle_id":app.config["app_store"]["bundle_id"],"version":"1.2.3","build_number":"7","profile_uuid":"11111111-1111-1111-1111-111111111111","profile_sha256":"a".repeat(64),"certificate_sha256":"b".repeat(64),"executable_sha256":"c".repeat(64),"binary_uuids":["UUID (arm64)"]}]})).unwrap();
     release::seal(app, "1.2.3", "7", &app.root.join("build/native-release")).unwrap();
     store::Release::load(app, &app.root.join("build/native-release")).unwrap()
 }
@@ -80,7 +80,7 @@ fn vault_rejects_short_password_and_unbounded_parameters() {
 }
 #[test]
 fn vault_is_scoped_to_team_and_all_targets() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut v = json!({"schema_version":1,"team_id":"ABCDE12345","bundle_ids":["dev.example.OrbitNotes"],"private_key_pem":"PRIVATE KEY"});
     assert!(signing::validate_vault(&app, &v).is_ok());
     v["team_id"] = json!("OTHER12345");
@@ -168,7 +168,7 @@ fn v2_initialization_allows_qa_before_signing() {
 }
 #[test]
 fn compliance_cannot_be_guessed() {
-    let (_, mut app) = app();
+    let (_root, mut app) = app();
     app.config["targets"][0]["tracking"] = Value::Null;
     assert!(app.require_archive().is_err());
     app.config["targets"][0]["tracking"] = json!(false);
@@ -177,7 +177,7 @@ fn compliance_cannot_be_guessed() {
 }
 #[test]
 fn apple_integer_build_numbers_and_custom_configurations() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let steps = archive::steps(&app, "1.2.3", "7").unwrap();
     let args = steps[0]
         .args
@@ -196,7 +196,7 @@ fn apple_integer_build_numbers_and_custom_configurations() {
 }
 #[test]
 fn qa_without_named_tests_is_rejected() {
-    let (_, mut app) = app();
+    let (_root, mut app) = app();
     app.config["test_targets"] = json!([]);
     assert!(
         ios_release_native::qa::command(&app, "test", "destination", Path::new("out"), "1")
@@ -205,7 +205,7 @@ fn qa_without_named_tests_is_rejected() {
 }
 #[test]
 fn stale_qa_does_not_seal_a_changed_source() {
-    let (_, app) = app();
+    let (_root, app) = app();
     qa(&app);
     assert!(release::verify_qa(&app).is_ok());
     fsutil::atomic(&app.root.join("App.swift"), b"modified source").unwrap();
@@ -214,7 +214,7 @@ fn stale_qa_does_not_seal_a_changed_source() {
 #[test]
 fn release_rejects_changed_ipa_and_qa() {
     for file in ["application.ipa", "qa.json", "archive.json", "app.json"] {
-        let (_, app) = app();
+        let (_root, app) = app();
         let release = candidate(&app);
         fsutil::atomic(&release.directory.join(file), b"changed").unwrap();
         assert!(store::Release::load(&app, &release.directory).is_err());
@@ -222,7 +222,7 @@ fn release_rejects_changed_ipa_and_qa() {
 }
 #[test]
 fn receipts_are_bound_to_one_app_version_and_ipa() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     release
         .checkpoint(json!({"identity":{"bundle_id":"wrong"}}))
@@ -231,7 +231,7 @@ fn receipts_are_bound_to_one_app_version_and_ipa() {
 }
 #[test]
 fn sealed_releases_cannot_be_overwritten() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let release = candidate(&app);
     assert!(release::seal(&app, "1.2.3", "7", &release.directory).is_err());
 }
@@ -261,6 +261,30 @@ fn project_parser_rejects_duplicate_and_unterminated_values() {
     for source in ["{a=1;a=2;}", "{a=\"unterminated;}", "{/*unfinished"] {
         assert!(project::parse(source).is_err());
     }
+}
+#[test]
+fn discovers_test_only_targets_and_custom_archive_configuration() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/OrbitNotes")
+        .canonicalize()
+        .unwrap();
+    let settings = json!([{"target":"OrbitNotes","buildSettings":{"PRODUCT_TYPE":"com.apple.product-type.application","PRODUCT_BUNDLE_IDENTIFIER":"dev.fixture.Orbit","PROJECT_FILE_PATH":fixture.join("OrbitNotes.xcodeproj")}}]);
+    let devices = json!({"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPhone 18 Pro Max","isAvailable":true}]}});
+    let config = onboarding::config_from_settings(
+        &fixture,
+        "project",
+        "OrbitNotes.xcodeproj",
+        "OrbitNotes",
+        json!({"runtime":"27.0"}),
+        &devices,
+        &settings,
+        &onboarding::Options::default(),
+    )
+    .unwrap();
+    assert_eq!(config["test_targets"], json!(["OrbitNotesTests"]));
+    assert_eq!(config["configurations"]["archive"], "AppStore");
+    assert!(config["targets"][0]["tracking"].is_null());
+    assert!(config["targets"][0]["non_exempt_encryption"].is_null());
 }
 #[test]
 fn generated_actions_are_pinned_and_do_not_overwrite_existing_work() {
@@ -488,7 +512,7 @@ impl Api for AppleFixture {
 }
 #[test]
 fn native_upload_stage_and_review_are_idempotent() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     store::upload(&app, &mut release, &mut api).unwrap();
@@ -509,7 +533,7 @@ fn interrupted_upload_reservation_is_reconciled_without_duplicate_post() {
         "POST /v1/buildUploadFiles",
         "PATCH /v1/buildUploadFiles/asset",
     ] {
-        let (_, app) = app();
+        let (_root, app) = app();
         let mut release = candidate(&app);
         let mut api = AppleFixture {
             lost: Some(lost.into()),
@@ -529,7 +553,7 @@ fn interrupted_upload_reservation_is_reconciled_without_duplicate_post() {
 }
 #[test]
 fn unowned_unfinished_reservations_are_not_overwritten() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::done();
     api.upload.as_mut().unwrap()["attributes"]["state"]["state"] = json!("AWAITING_UPLOAD");
@@ -538,7 +562,7 @@ fn unowned_unfinished_reservations_are_not_overwritten() {
 }
 #[test]
 fn wrong_marketing_version_cannot_be_selected() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     api.complete(&release);
@@ -548,7 +572,7 @@ fn wrong_marketing_version_cannot_be_selected() {
 }
 #[test]
 fn stage_never_replaces_a_foreign_selected_build() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     api.complete(&release);
@@ -561,7 +585,7 @@ fn stage_never_replaces_a_foreign_selected_build() {
 }
 #[test]
 fn submission_requires_confirmation_before_any_request() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     assert!(store::submit(&app, &mut release, &mut api, false).is_err());
@@ -574,7 +598,7 @@ fn lost_review_response_resumes_its_owned_submission() {
         "POST /v1/reviewSubmissionItems",
         "PATCH /v1/reviewSubmissions/review",
     ] {
-        let (_, app) = app();
+        let (_root, app) = app();
         let mut release = candidate(&app);
         let mut api = AppleFixture::default();
         api.complete(&release);
@@ -588,7 +612,7 @@ fn lost_review_response_resumes_its_owned_submission() {
 }
 #[test]
 fn unrelated_active_review_is_not_adopted() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     api.complete(&release);
@@ -599,7 +623,7 @@ fn unrelated_active_review_is_not_adopted() {
 }
 #[test]
 fn testflight_assignment_is_app_scoped_and_idempotent() {
-    let (_, app) = app();
+    let (_root, app) = app();
     let mut release = candidate(&app);
     let mut api = AppleFixture::default();
     api.complete(&release);

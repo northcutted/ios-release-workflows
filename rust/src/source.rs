@@ -25,6 +25,7 @@ pub fn fingerprint(root: &Path) -> Result<String> {
                 "Pods",
                 "DerivedData",
                 "xcuserdata",
+                ".venv",
             ]
             .contains(&name.as_ref())
             {

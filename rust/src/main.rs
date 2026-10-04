@@ -10,10 +10,10 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     version,
-    about = "Native iOS build and simulator automation; explicit opt-in, no legacy workflow changes"
+    about = "Native iOS signing, QA, TestFlight and App Store releases"
 )]
 struct Cli {
-    #[arg(long, global = true, default_value = ".")]
+    #[arg(long, global = true, env = "IOS_APP_ROOT", default_value = ".")]
     app_root: PathBuf,
     #[arg(
         long,
@@ -36,6 +36,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Github {
+        #[command(subcommand)]
+        action: Github,
+    },
     Init {
         #[arg(long)]
         project: Option<String>,
@@ -90,7 +94,7 @@ enum Commands {
         destinations_json: bool,
     },
     Qa {
-        #[arg(value_parser = ["lint", "localization", "analyze", "test", "test-compatibility"])]
+        #[arg(value_parser = ["all", "lint", "localization", "analyze", "test", "test-compatibility"])]
         check: String,
     },
     Test,
@@ -146,6 +150,14 @@ enum Auth {
 }
 #[derive(Subcommand)]
 enum Signing {
+    Export {
+        #[arg(long, default_value = "build/native-signing/signing.json")]
+        output: PathBuf,
+    },
+    Apply {
+        #[arg(long)]
+        input: PathBuf,
+    },
     Import {
         #[arg(long)]
         p12: PathBuf,
@@ -161,6 +173,26 @@ enum Signing {
 }
 #[derive(Subcommand)]
 enum Release {
+    Build {
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        build_number: String,
+        #[arg(long)]
+        installed_signing: bool,
+    },
+    VerifyArchive {
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        build_number: String,
+    },
+    Pack {
+        #[arg(long, default_value = "build/native-release")]
+        release: PathBuf,
+        #[arg(long, default_value = "build/native-release.zip")]
+        output: PathBuf,
+    },
     Prepare {
         #[arg(long, default_value = "1.0.0")]
         version: String,
@@ -181,6 +213,7 @@ enum Release {
 }
 #[derive(Subcommand)]
 enum Store {
+    Validate,
     Publish {
         #[arg(long)]
         confirm: bool,
@@ -201,6 +234,23 @@ enum Store {
     Submit {
         #[arg(long)]
         confirm: bool,
+    },
+}
+#[derive(Subcommand)]
+enum Github {
+    Controls {
+        #[arg(long, default_value = "xcode-27")]
+        runner: String,
+    },
+    Fetch {
+        #[arg(long)]
+        run: u64,
+        #[arg(long, default_value = "build/native-release")]
+        output: PathBuf,
+    },
+    Setup {
+        #[arg(long)]
+        reviewer: Option<String>,
     },
 }
 
@@ -234,6 +284,7 @@ fn run(cli: Cli) -> Result<i32> {
                     ,"release":{"description":"Prepare and seal QA-verified releases with an exact IPA identity"}
                     ,"store":{"description":"Upload, reconcile processing, stage metadata and request App Review"}
                     ,"status":{"description":"Read production and TestFlight status"}
+                    ,"github":{"description":"Configure protected Actions and authenticate prepared releases and recovery receipts"}
                 },"apple_store_mutations":true})
             )?
         );
@@ -324,6 +375,43 @@ fn run(cli: Cli) -> Result<i32> {
     let mut app = App::load(&cli.app_root, &cli.config)?;
     let mut executor = Native;
     match command {
+        Commands::Github { action } => match action {
+            Github::Controls { runner } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-controls","runner":runner,"branch":"main","production_requires_reviewers":true})
+                    );
+                } else {
+                    ios_release_native::github::controls(&app, &runner, &mut executor)?;
+                }
+            }
+            Github::Fetch { run, output } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, attestation, manifest and receipt identity"})
+                    );
+                } else {
+                    ios_release_native::github::fetch(
+                        &app,
+                        run,
+                        &app.root.join(output),
+                        &mut executor,
+                    )?;
+                }
+            }
+            Github::Setup { reviewer } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-setup","repository":app.config["repository"],"environments":["native-signing-admin","native-signing","native-app-store","native-production"],"production_reviewers":reviewer,"branch":"main"})
+                    );
+                } else {
+                    ios_release_native::github::setup(&app, reviewer.as_deref(), &mut executor)?;
+                }
+            }
+        },
         Commands::Signing { action } => {
             if cli.plan {
                 println!(
@@ -333,6 +421,12 @@ fn run(cli: Cli) -> Result<i32> {
                 return Ok(0);
             }
             match action {
+                Signing::Export { output } => {
+                    ios_release_native::signing_inputs::export(&app, &app.root.join(output))?
+                }
+                Signing::Apply { input } => {
+                    ios_release_native::signing_inputs::apply(&app, &app.root.join(input))?
+                }
                 Signing::Import { p12, password_env } => {
                     signing::import(&app, &p12, &password_env, &mut executor)?
                 }
@@ -396,6 +490,25 @@ fn run(cli: Cli) -> Result<i32> {
                 Release::NextBuildNumber => {
                     println!("{}", store::next_number(&app, &mut Apple::new()?)?)
                 }
+                Release::Build {
+                    version,
+                    build_number,
+                    installed_signing,
+                } => release::build(
+                    &app,
+                    &version,
+                    &build_number,
+                    &mut executor,
+                    !installed_signing,
+                )?,
+                Release::VerifyArchive {
+                    version,
+                    build_number,
+                } => release::verify_archive(&app, &version, &build_number, &mut executor)?,
+                Release::Pack {
+                    release: directory,
+                    output,
+                } => release::pack(&app, &app.root.join(directory), &app.root.join(output))?,
             }
         }
         Commands::Store {
@@ -405,7 +518,18 @@ fn run(cli: Cli) -> Result<i32> {
             if cli.plan {
                 println!(
                     "{}",
-                    json!({"operation":"store","release":directory,"apple_mutations":!matches!(action,Store::Status|Store::Wait{..}),"submission_requires_confirmation":matches!(action,Store::Submit{..}),"bundle_id":app.config["app_store"]["bundle_id"]})
+                    json!({"operation":"store","release":directory,"apple_mutations":!matches!(action,Store::Status|Store::Validate|Store::Wait{..}),"submission_requires_confirmation":matches!(action,Store::Submit{..}),"bundle_id":app.config["app_store"]["bundle_id"]})
+                );
+                return Ok(0);
+            }
+            if matches!(action, Store::Validate) {
+                let locales = metadata::preflight(&app)?
+                    .into_iter()
+                    .map(|(locale, _, _)| locale)
+                    .collect::<Vec<_>>();
+                println!(
+                    "{}",
+                    json!({"valid":true,"locales":locales,"apple_mutations":false})
                 );
                 return Ok(0);
             }
@@ -433,7 +557,7 @@ fn run(cli: Cli) -> Result<i32> {
                 }
                 Store::Metadata => metadata::sync(&app, &mut release, &mut api)?,
                 Store::Submit { confirm } => store::submit(&app, &mut release, &mut api, confirm)?,
-                Store::Status => unreachable!(),
+                Store::Status | Store::Validate => unreachable!(),
             }
             println!("{}", serde_json::to_string_pretty(&release.receipt)?);
         }
@@ -567,6 +691,16 @@ fn run(cli: Cli) -> Result<i32> {
 }
 
 fn run_qa(plan: bool, app: &App, check: &str, executor: &mut Native) -> Result<i32> {
+    if check == "all" {
+        let checks = app.qa_checks()?;
+        for name in checks {
+            let status = run_qa(plan, app, &name, executor)?;
+            if status != 0 {
+                return Ok(status);
+            }
+        }
+        return Ok(0);
+    }
     if plan {
         let workers = std::env::var("TEST_WORKERS").unwrap_or_else(|_| "1".into());
         let value = if ["lint", "localization"].contains(&check) {

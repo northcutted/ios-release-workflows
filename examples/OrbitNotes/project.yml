@@ -34,6 +34,7 @@ targets:
     info:
       path: Share/Info.plist
       properties:
+        CFBundleDisplayName: Orbit Share
         ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services

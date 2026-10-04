@@ -34,6 +34,8 @@ pub struct Step {
     pub args: Vec<Arg>,
     pub env: BTreeMap<String, String>,
     pub timeout_seconds: u64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub stdin_file: Option<std::path::PathBuf>,
 }
 
 impl Step {
@@ -47,10 +49,15 @@ impl Step {
             args: args.into_iter().map(|v| Arg::Text(v.into())).collect(),
             env: BTreeMap::new(),
             timeout_seconds,
+            stdin_file: None,
         }
     }
     pub fn developer(mut self, path: &str) -> Self {
         self.env.insert("DEVELOPER_DIR".into(), path.into());
+        self
+    }
+    pub fn github(mut self) -> Self {
+        self.env.insert("GH_HOST".into(), "github.com".into());
         self
     }
 }
@@ -151,6 +158,11 @@ impl Executor for Native {
             .current_dir(root)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if let Some(path) = &step.stdin_file {
+            command.stdin(File::open(path)?);
+        } else {
+            command.stdin(Stdio::null());
+        }
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;

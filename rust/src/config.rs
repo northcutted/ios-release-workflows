@@ -71,6 +71,17 @@ impl App {
         };
         let mut config: Value =
             serde_json::from_slice(&fs::read(&path).context("Cannot read app configuration")?)?;
+        if std::env::var("IOS_RELEASE_NATIVE_WORKFLOW").as_deref() == Ok("1") {
+            let workspace = PathBuf::from(
+                std::env::var_os("GITHUB_WORKSPACE").context("Hosted workspace missing")?,
+            )
+            .canonicalize()?;
+            ensure!(
+                root.starts_with(&workspace),
+                "Native workflow app root escapes its source checkout"
+            );
+            crate::fsutil::confined(&root, &path)?;
+        }
         if config["schema_version"] == 2 {
             let values = config
                 .as_object_mut()
@@ -368,5 +379,26 @@ impl App {
             } else {
                 "Debug"
             })
+    }
+    pub fn qa_checks(&self) -> Result<Vec<String>> {
+        let checks = if self.config["qa_checks"].is_null() {
+            vec!["analyze".into(), "localization".into(), "test".into()]
+        } else {
+            strings(&self.config["qa_checks"])?
+        };
+        ensure!(
+            checks.iter().any(|v| v == "test")
+                && checks.iter().all(|v| [
+                    "analyze",
+                    "localization",
+                    "test",
+                    "test-compatibility",
+                    "lint"
+                ]
+                .contains(&v.as_str()))
+                && checks.iter().collect::<HashSet<_>>().len() == checks.len(),
+            "QA checks must be unique supported checks and include app tests"
+        );
+        Ok(checks)
     }
 }

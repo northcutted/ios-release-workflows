@@ -11,11 +11,12 @@ runs:
       shell: bash
       run: |
         root="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
-        actual="$(git -C "$root" rev-parse HEAD)"
+        actual="$(basename "$root")"
+        if test -e "$root/.git"; then actual="$(git -C "$root" rev-parse HEAD)"; fi
         test "$actual" = "$PLATFORM_REVISION"
         test "${#PLATFORM_REVISION}" = 40
         rustup toolchain install 1.98.1 --profile minimal
-        cargo build --manifest-path "$root/rust/Cargo.toml" --locked --release
+        IOS_RELEASE_BUILD_REVISION="$PLATFORM_REVISION" cargo build --manifest-path "$root/rust/Cargo.toml" --locked --release
         echo "$root/rust/target/release" >> "$GITHUB_PATH"
         echo "IOS_RELEASE_NATIVE_ROOT=$root" >> "$GITHUB_ENV"
       env:

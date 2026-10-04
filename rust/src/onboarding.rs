@@ -220,9 +220,54 @@ pub fn config_from_settings(
     }
     let bundle = app[0]["bundle_id"].clone();
     app.extend(extensions);
+    for target in &app {
+        let path = root
+            .join(
+                target["project"]
+                    .as_str()
+                    .context("Target project missing")?,
+            )
+            .join("project.pbxproj");
+        if path.exists() {
+            let text = fs::read_to_string(&path)?;
+            let parsed = crate::project::parse(&text)?;
+            for node in parsed.get("objects")?.map()?.values() {
+                let object = node.map()?;
+                if object.get("isa").and_then(|n| n.text().ok()) == Some("PBXNativeTarget")
+                    && object.get("productType").and_then(|n| n.text().ok())
+                        == Some("com.apple.product-type.bundle.unit-test")
+                {
+                    let name = node.get("name")?.text()?.to_owned();
+                    if !tests.contains(&name) {
+                        tests.push(name);
+                    }
+                }
+            }
+        }
+    }
+    let mut configurations = json!({"test":"Debug","archive":"Release"});
+    let scheme_file = root
+        .join(project)
+        .join("xcshareddata/xcschemes")
+        .join(format!("{scheme}.xcscheme"));
+    if scheme_file.exists() {
+        fsutil::confined(root, &scheme_file)?;
+        let xml = fs::read_to_string(scheme_file)?;
+        for (action, key) in [("ArchiveAction", "archive"), ("TestAction", "test")] {
+            let pattern = regex::Regex::new(&format!(
+                r#"(?s)<{action}\b[^>]*\bbuildConfiguration\s*=\s*"([^"]+)""#
+            ))?;
+            if let Some(captures) = pattern.captures(&xml) {
+                configurations[key] = json!(&captures[1]);
+            }
+        }
+    }
     let mut config = json!({"schema_version":2,"scheme":scheme,"team_id":team,"test_targets":tests,"test_device":device,"xcode":xcode,"targets":app,"locales":["en-US"],"localization_catalogs":catalogs,"localization_locales":["en"],"screenshot_devices":[device],"screens":[],"signing":{"vault":".ios-release/signing.vault"},"configurations":{"test":"Debug","archive":"Release"},"app_store":{"bundle_id":bundle,"release_type":"MANUAL","phased_release":false,"testflight_groups":[]},"metadata_path":"store/metadata","screenshots_path":"store/screenshots"});
     config[kind] = json!(project);
+    config["configurations"] = configurations;
     if let Some(repo) = &options.repository {
+        config["repository"] = json!(repo);
+    } else if let Ok(repo) = std::env::var("GITHUB_REPOSITORY") {
         config["repository"] = json!(repo);
     }
     Ok(config)
@@ -401,9 +446,23 @@ pub fn init(
         .developer(developer),
         &root,
     )?)?;
-    let config = config_from_settings(
+    let mut config = config_from_settings(
         &root, kind, &project, &scheme, xcode, &devices, &settings, options,
     )?;
+    if config["repository"].is_null()
+        && let Ok(remote) = checked(
+            executor,
+            &Step::new("git", ["remote", "get-url", "origin"], 30),
+            &root,
+        )
+    {
+        let pattern = regex::Regex::new(
+            r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$",
+        )?;
+        if let Some(captures) = pattern.captures(remote.trim()) {
+            config["repository"] = json!(&captures[1]);
+        }
+    }
     fsutil::json(&config_path, &config)?;
     let metadata = root.join("store/metadata/en-US");
     fs::create_dir_all(&metadata)?;
@@ -452,7 +511,7 @@ pub fn write_workflow(root: &Path, revision: &str) -> Result<()> {
         !path.exists(),
         "Existing native workflow will not be overwritten"
     );
-    let text=format!("name: iOS app\non:\n  pull_request: {{}}\n  workflow_dispatch:\n    inputs:\n      operation:\n        type: choice\n        options: [prepare, testflight, stage, submit, metadata, status]\n        default: prepare\n      release_run:\n        description: Preparation run ID for delivery or updates\n        type: string\n      version:\n        description: App version for preparation\n        type: string\n        default: 1.0.0\npermissions:\n  contents: read\njobs:\n  app:\n    uses: northcutted/ios-release-workflows/.github/workflows/native-app.yml@{revision}\n    with:\n      operation: __EXPR__{{{{ github.event_name == 'pull_request' && 'check' || inputs.operation }}}}\n      release_run: __EXPR__{{{{ inputs.release_run }}}}\n      version: __EXPR__{{{{ inputs.version }}}}\n      platform_revision: {revision}\n    secrets:\n      IOS_RELEASE_API_KEY_ID: __EXPR__{{{{ secrets.IOS_RELEASE_API_KEY_ID }}}}\n      IOS_RELEASE_API_ISSUER_ID: __EXPR__{{{{ secrets.IOS_RELEASE_API_ISSUER_ID }}}}\n      IOS_RELEASE_API_KEY_CONTENT: __EXPR__{{{{ secrets.IOS_RELEASE_API_KEY_CONTENT }}}}\n      IOS_RELEASE_SIGNING_PASSWORD: __EXPR__{{{{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}}}\n").replace("__EXPR__","$");
+    let text = include_str!("../assets/native-call.yml").replace("__PLATFORM_REVISION__", revision);
     fsutil::atomic(&path, text.as_bytes())
 }
 pub fn auth_home() -> Result<PathBuf> {

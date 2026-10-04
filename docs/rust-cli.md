@@ -1,8 +1,8 @@
-# Rust CLI preview
+# Native Rust CLI
 
-The Rust implementation is a standalone `ios-release` executable for native iOS and iPadOS builds. It reads the existing `.github/ios-release.json` app configuration. Once compiled, it needs no Ruby, Python, Node, Bundler or uv runtime. Native builds still require macOS, the configured Xcode, and installed signing assets; lint requires SwiftLint.
+The Rust implementation is a standalone `ios-release` executable for native iOS and iPadOS releases. New apps use `.ios-release.json`; the existing `.github/ios-release.json` contract remains supported. Once compiled, it needs no Ruby, Python, Node, Bundler or uv runtime. Native builds require macOS and the configured Xcode; signing uses OpenSSL and Keychain tools, and lint requires SwiftLint. [Native quickstart](native-quickstart.md) covers onboarding through production management.
 
-This preview is additive. Existing callers, bootstrap actions, Python entrypoints and Fastlane release adapters retain their current behavior. It is not a replacement for the entire release platform. App Store operations and authenticated release candidates continue through the existing protected workflows.
+The native path is opt-in. Existing callers, bootstrap actions, Python entrypoints and Fastlane adapters retain their behavior. New native workflows separately support signing, authenticated preparation and Apple operations. PicStrip's default release path stays on the established adapter until fresh signed and live delivery parity are verified.
 
 ## Build and invoke explicitly
 
@@ -38,6 +38,13 @@ Use the binary by its full path while evaluating it. Do not replace the existing
 | `archive --version … --build-number …` | Archives and exports using installed manual signing assets; validates exported bundles, privacy policies, profiles, entitlements, certificates, and matching dSYMs |
 | `screenshots`, `screenshots-capture` | Builds an explicit UI test scheme once per selected device and captures configured locales without rebuilding |
 | `xcresult-report --summary … --tests …` | Reads exported XCTest JSON and prints reconciled results, JUnit, and bootstrap classification |
+| `init`, `auth login` | Discovers an app and stores its Apple API key privately |
+| `signing sync`, `signing import`, `signing status` | Reconciles owned certificates/profiles, imports existing identities and reports renewal state |
+| `qa all`, `release prepare` | Runs configured QA and prepares a source-bound signed release |
+| `github setup`, `github fetch` | Configures protected native environments or downloads an authenticated preparation and recovery receipt |
+| `store upload`, `store wait`, `store testflight` | Transfers the exact IPA, reconciles Apple processing and assigns beta groups |
+| `store stage`, `store metadata`, `store submit --confirm` | Selects the exact build, applies content and requests review |
+| `store publish --confirm`, `store phased …`, `status` | Publishes an approved version, manages phased updates and reads production state |
 
 QA keeps the existing `qa-results/<check>/result.json`, `report.junit`, and `build/build-env.json` contracts. A nonzero Xcode exit remains a failure even if the xcresult says passed. Missing or inconsistent evidence fails. Stale JUnit is removed before execution.
 
@@ -62,13 +69,13 @@ Apps whose helper explicitly reads `IOS_RELEASE_SNAPSHOT_HOME` can opt into `--i
 
 One recovery is allowed per capture job, only on disposable GitHub-hosted runners and only for the recorded pre-test XCTest bootstrap signature. Recovery resets the exact resolved simulator UUID and reuses the same compiled test run. Assertion failures, app launch failures, executed tests and unknown evidence never trigger recovery. First-attempt logs, xcresults, readiness and recovery records are retained under `build/rust-screenshots/<job>`.
 
-Composition, publishing, signing installation and store delivery continue through their existing adapters.
+Screenshot composition remains app-owned. Native capture outputs opaque RGB PNGs suitable for Apple asset delivery. The native store commands upload these without loading Fastlane.
 
 ## Validation and adoption
 
 The additive `Rust CLI checks` workflow tests Linux and macOS binaries, compares XCTest/localization contracts with the deployed Python implementation, and exercises an immutable PicStrip source checkout. Each native test runtime and each screenshot device runs on its own fresh runner. English and Arabic capture test both ordinary and right-to-left locales. These jobs do not receive release secrets or production approval permissions.
 
-Before changing consumer defaults, require passing existing platform regressions and native canaries, full configured screenshot coverage, and a signed archive comparison against the current release adapter. Signing installation, store operations, candidate verification and resumable promotion need their own migration and parity checks. A Rust canary passing does not authorize a production release.
+Before changing consumer defaults, require passing existing platform regressions and native canaries, full configured screenshot coverage, and a fresh signed archive comparison against the current release adapter. Native signing, Apple operations, attested selection and recovery need live adoption checks beyond simulated API contracts. A passing unsigned canary does not authorize a production release.
 
 To develop the preview:
 

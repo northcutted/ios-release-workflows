@@ -6,16 +6,9 @@ use std::{fs, path::Path};
 pub fn verify_qa(app: &App) -> Result<Value> {
     let inputs = crate::source::fingerprint(&app.root)?;
     let mut results = json!({});
-    let checks = app.config["qa_checks"]
-        .as_array()
-        .map(|v| v.iter().filter_map(|s| s.as_str()).collect::<Vec<_>>())
-        .unwrap_or_else(|| vec!["analyze", "localization", "test"]);
-    ensure!(
-        checks.contains(&"test"),
-        "Release QA must include executed app tests"
-    );
+    let checks = app.qa_checks()?;
     for check in checks {
-        let path = app.root.join("qa-results").join(check).join("result.json");
+        let path = app.root.join("qa-results").join(&check).join("result.json");
         let mut value: Value = serde_json::from_slice(
             &fs::read(&path).with_context(|| format!("Run qa {check} before sealing a release"))?,
         )?;
@@ -62,6 +55,7 @@ pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<
         archive["version"] == version && archive["build_number"] == number,
         "Archive identity differs from release"
     );
+    validate_inventory(app, &archive)?;
     ensure!(
         archive["inputs_sha256"] == crate::source::fingerprint(&app.root)?,
         "Archive is stale; rerun preparation after changing app inputs"
@@ -93,9 +87,65 @@ pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<
         .or_else(|_| std::env::var("GITHUB_SHA"))
         .unwrap_or_else(|_| "local".into());
     let manifest = json!({"schema_version":2,"verified":true,"source_sha":source,"run_id":archive["run_id"],"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"bundle_id":app.config["app_store"]["bundle_id"],"team_id":app.config["team_id"],"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&staged.join("application.ipa"))?,"config_sha256":fsutil::sha256(&staged.join("app.json"))?,"qa_sha256":fsutil::sha256(&staged.join("qa.json"))?,"archive_sha256":fsutil::sha256(&staged.join("archive.json"))?});
+    let mut manifest = manifest;
+    manifest["repository"] = json!(
+        std::env::var("GITHUB_REPOSITORY")
+            .ok()
+            .or_else(|| app.config["repository"].as_str().map(String::from))
+    );
     fsutil::json(&staged.join("release.json"), &manifest)?;
     fs::rename(staged, directory)?;
     Ok(manifest)
+}
+pub fn validate_inventory(app: &App, archive: &Value) -> Result<()> {
+    let inventory = archive["applications"]
+        .as_array()
+        .context("Verified app/extension inventory missing")?;
+    let targets = app.config["targets"]
+        .as_array()
+        .context("Signing targets missing")?;
+    ensure!(
+        inventory.len() == targets.len() && !inventory.is_empty(),
+        "Archive has missing or additional apps/extensions"
+    );
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in inventory {
+        let bundle = entry["bundle_id"]
+            .as_str()
+            .context("Verified bundle ID missing")?;
+        ensure!(seen.insert(bundle), "Duplicate verified bundle");
+        ensure!(
+            targets.iter().any(|t| t["bundle_id"] == bundle),
+            "Unexpected verified bundle"
+        );
+        ensure!(
+            entry["version"] == archive["version"]
+                && entry["build_number"] == archive["build_number"],
+            "Bundle version/build differs from archive"
+        );
+        for key in ["profile_sha256", "executable_sha256", "certificate_sha256"] {
+            ensure!(
+                entry[key]
+                    .as_str()
+                    .is_some_and(|s| s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit())),
+                "Verified {key} missing or invalid"
+            );
+        }
+        ensure!(
+            entry["profile_uuid"]
+                .as_str()
+                .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok()),
+            "Verified provisioning profile UUID missing"
+        );
+        ensure!(
+            entry["binary_uuids"]
+                .as_array()
+                .is_some_and(|v| !v.is_empty()
+                    && v.iter().all(|s| s.as_str().is_some_and(|s| !s.is_empty()))),
+            "Verified executable symbols missing"
+        );
+    }
+    Ok(())
 }
 pub fn prepare(
     app: &mut App,
@@ -104,26 +154,14 @@ pub fn prepare(
     executor: &mut impl Executor,
     managed: bool,
 ) -> Result<Value> {
-    let checks = app.config["qa_checks"]
-        .as_array()
-        .map(|v| {
-            v.iter()
-                .filter_map(|s| s.as_str().map(String::from))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| vec!["analyze".into(), "localization".into(), "test".into()]);
+    let checks = app.qa_checks()?;
     for check in checks {
         ensure!(
             qa::run(app, &check, executor)? == 0,
             "Release stopped because {check} failed"
         );
     }
-    let _installed = if managed {
-        Some(signing::Installed::install(app, executor)?)
-    } else {
-        None
-    };
-    archive::run(app, version, number, executor)?;
+    build(app, version, number, executor, managed)?;
     let directory = app.root.join("build/native-release");
     let value = seal(app, version, number, &directory)?;
     println!(
@@ -132,4 +170,59 @@ pub fn prepare(
         directory.display()
     );
     Ok(value)
+}
+pub fn build(
+    app: &App,
+    version: &str,
+    number: &str,
+    executor: &mut impl Executor,
+    managed: bool,
+) -> Result<()> {
+    let _installed = if managed {
+        Some(signing::Installed::install(app, executor)?)
+    } else {
+        None
+    };
+    archive::run(app, version, number, executor)
+}
+pub fn verify_archive(
+    app: &App,
+    version: &str,
+    number: &str,
+    executor: &mut impl Executor,
+) -> Result<()> {
+    app.require_archive()?;
+    let ipa = app.root.join("build/application.ipa");
+    let inventory = archive::verify(app, &ipa, version, number, executor)?;
+    fsutil::json(
+        &app.root.join("build/rust-archive.json"),
+        &json!({"schema_version":1,"implementation":"rust","inputs_sha256":crate::source::fingerprint(&app.root)?,"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"verified_without_build_credentials":true}),
+    )
+}
+pub fn pack(app: &App, directory: &Path, output: &Path) -> Result<()> {
+    let _validated = crate::store::Release::load(app, directory)?;
+    fsutil::confined(&app.root, output)?;
+    ensure!(!output.exists(), "Release package already exists");
+    let mut writer = zip::ZipWriter::new(
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output)?,
+    );
+    for name in [
+        "application.ipa",
+        "app.json",
+        "qa.json",
+        "archive.json",
+        "release.json",
+    ] {
+        writer.start_file(
+            name,
+            zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored),
+        )?;
+        std::io::copy(&mut fs::File::open(directory.join(name))?, &mut writer)?;
+    }
+    writer.finish()?.sync_all()?;
+    Ok(())
 }

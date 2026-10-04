@@ -1,0 +1,72 @@
+name: Package native CLI
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  binaries:
+    name: Build standalone binary (${{ matrix.asset }})
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            asset: macos-arm64
+          - runner: macos-26-intel
+            asset: macos-x86_64
+          - runner: ubuntu-24.04
+            asset: linux-x86_64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Compile and test locked source
+        working-directory: rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo build --locked --release
+          target/release/ios-release doctor
+          mkdir -p dist
+          cp target/release/ios-release "dist/ios-release-$ASSET"
+        env:
+          ASSET: ${{ matrix.asset }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-binary-${{ matrix.asset }}
+          path: rust/dist/
+          if-no-files-found: error
+          retention-days: 90
+  provenance:
+    name: Attest the tested binaries without compiling them
+    needs: binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: native-binary-*
+          merge-multiple: true
+          path: dist/
+      - name: Calculate portable checksums
+        working-directory: dist
+        run: sha256sum ios-release-* > SHA256SUMS
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: dist/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-cli-distribution
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90

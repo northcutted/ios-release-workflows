@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class OnboardingTests: XCTestCase {
     func testLaunch() {
         let app = XCUIApplication()

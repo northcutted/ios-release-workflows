@@ -68,6 +68,23 @@ def validate(items):
     check(opts.get("artifact_id") == "${{ needs.resolve.outputs.artifact_id }}" and opts.get("sha256") == "${{ needs.resolve.outputs.sha256 }}", "Promotion must consume frozen verified artifact identity")
     check(opts.get("upload_adapter") == "${{ needs.resolve.outputs.upload_adapter }}", "Upload adapter must come from verified candidate configuration")
     check(all(job.get("secrets") != "inherit" for job in jobs.values()), "Release secrets must remain explicitly bound")
+    if "native-app.yml" in items:
+        native = items["native-app.yml"]["jobs"]
+        for name in ["check", "qa", "verify", "select", "guard"]:
+            job = native[name]
+            check(not job.get("environment") and "secrets." not in json.dumps(job) and not (job.get("permissions") or {}).get("id-token"), "native-app/" + name + ": app QA and verification must be secret-free")
+        build = native["build"]
+        check(build.get("environment") == "native-signing" and "IOS_RELEASE_API_KEY" not in json.dumps(build) and not (build.get("permissions") or {}).get("id-token"), "Native build must receive signing assets without Apple API or provenance credentials")
+        check(build.get("needs") == "signing" and native["qa"].get("needs") == "signing", "Native archive and QA must use the same signing input snapshot in parallel")
+        for name in ["seal", "receipt"]:
+            job = native[name]
+            body = json.dumps(job)
+            check(not job.get("environment") and "secrets." not in body and "release build" not in body and "qa all" not in body, "native-app/" + name + ": provenance must not execute app code or receive Apple credentials")
+        production = native["production"]
+        check(production.get("environment") == "native-production" and production.get("needs") == "select" and (production.get("concurrency") or {}).get("cancel-in-progress") is False and "github fetch" in json.dumps(production), "Native production requires owner approval, exact selection and fresh authentication")
+        check(native["deliver"].get("if") == "contains(fromJSON('[\"testflight\",\"stage\",\"metadata\"]'), inputs.operation)", "Beta and metadata jobs may not perform production operations")
+        check(native["production"].get("if") == "contains(fromJSON('[\"submit\",\"publish\",\"phase-pause\",\"phase-resume\",\"phase-complete\"]'), inputs.operation)", "Production operations must stay behind the owner gate")
+        check("github controls" in json.dumps(native["guard"]) and native["signing"].get("needs") == "guard" and native["select"].get("needs") == "guard", "Native mutations must validate repository controls first")
     return errors
 
 

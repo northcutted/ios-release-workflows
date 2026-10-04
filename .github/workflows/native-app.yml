@@ -1,0 +1,383 @@
+name: Native iOS app lifecycle
+on:
+  workflow_call:
+    inputs:
+      operation:
+        type: string
+        default: check
+      config:
+        type: string
+        default: .ios-release.json
+      app_root:
+        type: string
+        default: '.'
+      auto_init:
+        type: boolean
+        default: false
+      runner:
+        type: string
+        default: xcode-27
+      platform_revision:
+        type: string
+        required: true
+      release_run:
+        type: string
+        default: ''
+      version:
+        type: string
+        default: '1.0.0'
+      build_number:
+        type: string
+        default: ''
+    secrets:
+      IOS_RELEASE_API_KEY_ID:
+        required: false
+      IOS_RELEASE_API_ISSUER_ID:
+        required: false
+      IOS_RELEASE_API_KEY_CONTENT:
+        required: false
+      IOS_RELEASE_SIGNING_PASSWORD:
+        required: false
+      IOS_RELEASE_DEMO_PASSWORD:
+        required: false
+permissions:
+  contents: read
+jobs:
+  check:
+    name: Native app QA
+    if: inputs.operation == 'check'
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - &native
+        uses: $/actions/native
+        with:
+          revision: ${{ inputs.platform_revision }}
+      - name: Discover an unconfigured example app
+        if: inputs.auto_init
+        run: ios-release init --no-workflows
+      - run: ios-release qa all
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-qa-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/qa-results/
+          if-no-files-found: error
+          retention-days: 14
+    env: &source_env
+      IOS_APP_ROOT: ${{ inputs.app_root }}
+      IOS_RELEASE_NATIVE_WORKFLOW: '1'
+      IOS_RELEASE_CONFIG: ${{ inputs.config }}
+      SOURCE_SHA: ${{ github.sha }}
+  guard:
+    name: Require protected release controls
+    if: inputs.operation != 'check'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - *checkout
+      - *native
+      - name: Validate operation and repository controls
+        run: |
+          case "$OPERATION" in prepare|testflight|stage|metadata|submit|publish|phase-pause|phase-resume|phase-complete|status) ;; *) exit 1 ;; esac
+          ios-release github controls --runner "$MACOS_RUNNER"
+        env:
+          OPERATION: ${{ inputs.operation }}
+          MACOS_RUNNER: ${{ inputs.runner }}
+          GH_TOKEN: ${{ github.token }}
+    env: *source_env
+  signing:
+    name: Reconcile owned signing assets without compiling app code
+    if: inputs.operation == 'prepare'
+    needs: guard
+    environment: native-signing-admin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: native-signing-${{ github.repository }}
+      cancel-in-progress: false
+    outputs:
+      number: ${{ steps.number.outputs.number }}
+    steps:
+      - *checkout
+      - *native
+      - name: Sync owned certificate and provisioning profiles
+        run: |
+          ios-release signing sync
+          ios-release signing export
+        env:
+          IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
+          IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
+          IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
+          IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
+      - name: Select a new build number
+        id: number
+        run: |
+          if test -n "$REQUESTED_NUMBER"; then
+            number="$REQUESTED_NUMBER"
+          else
+            number="$(ios-release release next-build-number).$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+          fi
+          case "$number" in ''|*[!0-9.]*) exit 1 ;; esac
+          printf 'number=%s\n' "$number" >> "$GITHUB_OUTPUT"
+        env:
+          REQUESTED_NUMBER: ${{ inputs.build_number }}
+          IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
+          IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
+          IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-signing-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/build/native-signing/signing.json
+          if-no-files-found: error
+          retention-days: 90
+    env: *source_env
+  qa:
+    name: Test release inputs without signing or Apple credentials
+    needs: signing
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - *checkout
+      - *native
+      - &download_signing
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-signing-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/build/native-signing
+      - run: ios-release signing apply --input build/native-signing/signing.json
+      - run: ios-release qa all
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-release-qa-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/qa-results/
+          if-no-files-found: error
+          retention-days: 90
+    env: *source_env
+  build:
+    name: Build app with isolated signing assets
+    needs: signing
+    environment: native-signing
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - *checkout
+      - *native
+      - *download_signing
+      - run: ios-release signing apply --input build/native-signing/signing.json
+      - name: Archive and export without an Apple API key
+        run: ios-release release build --version "$VERSION" --build-number "$BUILD_NUMBER"
+        env:
+          IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ needs.signing.outputs.number }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-archive-${{ github.run_id }}
+          path: |
+            ${{ inputs.app_root }}/build/application.ipa
+            ${{ inputs.app_root }}/build/application.xcarchive/dSYMs/
+          if-no-files-found: error
+          retention-days: 90
+    env: *source_env
+  verify:
+    name: Verify signed IPA and matching symbols without build credentials
+    needs: [build, qa, signing]
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - *native
+      - *download_signing
+      - run: ios-release signing apply --input build/native-signing/signing.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-archive-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/build/
+      - name: Verify exported bundles, entitlements, profiles and dSYMs
+        run: ios-release release verify-archive --version "$VERSION" --build-number "$BUILD_NUMBER"
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ needs.signing.outputs.number }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-archive-verified-${{ github.run_id }}
+          path: |
+            ${{ inputs.app_root }}/build/application.ipa
+            ${{ inputs.app_root }}/build/rust-archive.json
+          if-no-files-found: error
+          retention-days: 90
+    env: *source_env
+  seal:
+    name: Seal and attest the verified release without compiling app code
+    needs: [verify, qa, signing]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - *checkout
+      - *native
+      - *download_signing
+      - run: ios-release signing apply --input build/native-signing/signing.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-archive-verified-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/build/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-release-qa-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/qa-results/
+      - name: Bind all successful QA to the verified binary and prepare its package
+        run: |
+          ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER"
+          ios-release release pack
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ needs.signing.outputs.number }}
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: ${{ inputs.app_root }}/build/native-release.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-release-${{ github.run_id }}
+          path: ${{ inputs.app_root }}/build/native-release.zip
+          if-no-files-found: error
+          retention-days: 90
+      - name: Explain next steps
+        run: printf 'Verified preparation **%s**. Choose TestFlight or Stage and use this run ID. App Review and public release require production approval.\n' "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+    env: *source_env
+  select:
+    name: Authenticate the exact preparation before requesting Apple credentials
+    if: contains(fromJSON('["testflight","stage","metadata","submit","publish","phase-pause","phase-resume","phase-complete"]'), inputs.operation)
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - *checkout
+      - *native
+      - name: Authenticate selected source, attestation and exact IPA
+        run: ios-release github fetch --run "$RELEASE_RUN"
+        env:
+          RELEASE_RUN: ${{ inputs.release_run }}
+          GH_TOKEN: ${{ github.token }}
+    env: *source_env
+  deliver:
+    name: Deliver verified beta or update store content
+    if: contains(fromJSON('["testflight","stage","metadata"]'), inputs.operation)
+    needs: select
+    environment: native-app-store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    concurrency: &store_concurrency
+      group: native-store-${{ github.repository }}
+      cancel-in-progress: false
+    steps: &delivery_steps
+      - *checkout
+      - *native
+      - name: Reauthenticate preparation and restore the latest verified operation receipt
+        run: ios-release github fetch --run "$RELEASE_RUN"
+        env:
+          RELEASE_RUN: ${{ inputs.release_run }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Apply the selected operation to this exact release
+        run: |
+          case "$OPERATION" in
+            testflight) ios-release store upload; ios-release store wait; ios-release store testflight ;;
+            stage) ios-release store upload; ios-release store wait; ios-release store stage; ios-release store metadata ;;
+            metadata) ios-release store metadata ;;
+            submit) ios-release store submit --confirm ;;
+            publish) ios-release store publish --confirm ;;
+            phase-pause) ios-release store phased PAUSED ;;
+            phase-resume) ios-release store phased ACTIVE ;;
+            phase-complete) ios-release store phased COMPLETE ;;
+            *) exit 1 ;;
+          esac
+        env:
+          OPERATION: ${{ inputs.operation }}
+          IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
+          IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
+          IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
+          IOS_RELEASE_DEMO_PASSWORD: ${{ secrets.IOS_RELEASE_DEMO_PASSWORD }}
+      - name: Retain interrupted and successful operation receipts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-operation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ inputs.app_root }}/build/native-release/operation.json
+          if-no-files-found: warn
+          retention-days: 90
+    env: *source_env
+  production:
+    name: Owner-approved App Review or public release
+    if: contains(fromJSON('["submit","publish","phase-pause","phase-resume","phase-complete"]'), inputs.operation)
+    needs: select
+    environment: native-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    concurrency: *store_concurrency
+    steps: *delivery_steps
+    env: *source_env
+  receipt:
+    name: Attest operation recovery state without Apple credentials
+    if: always() && (needs.deliver.result != 'skipped' || needs.production.result != 'skipped') && needs.select.result == 'success'
+    needs: [deliver, production, select]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-operation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: receipt/
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: receipt/operation.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-receipt-${{ inputs.release_run }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: receipt/operation.json
+          if-no-files-found: error
+          retention-days: 90
+  status:
+    name: Read current Apple app and build status
+    if: inputs.operation == 'status'
+    needs: guard
+    environment: native-app-store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - *native
+      - run: ios-release status
+        env:
+          IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
+          IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
+          IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
+    env: *source_env

@@ -8,6 +8,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_native_release_preserves_credential_and_approval_boundaries(self):
+        w = workflows(ROOT / ".github/workflows")
+        jobs = w["native-app.yml"]["jobs"]
+        jobs["qa"]["environment"] = "native-signing-admin"
+        jobs["build"]["env"]["IOS_RELEASE_API_KEY_ID"] = "${{ secrets.IOS_RELEASE_API_KEY_ID }}"
+        jobs["seal"]["steps"].append({"run": "ios-release release build"})
+        jobs["production"]["environment"] = "native-app-store"
+        jobs["deliver"]["if"] = "always()"
+        errors = "\n".join(validate(w))
+        for pattern in ["secret-free", "Native build", "provenance must not execute", "owner approval", "may not perform production"]:
+            self.assertIn(pattern, errors)
     def test_declared_boundaries(self):
         self.assertEqual(validate(workflows(ROOT / ".github/workflows")), [])
 
