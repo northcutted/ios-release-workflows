@@ -145,6 +145,7 @@ fn explicit_targets_workspace_and_serial_execution_are_preserved() {
         "1",
     )
     .unwrap();
+    assert_eq!(command.timeout_seconds, 3600);
     let args = args(&command);
     assert_eq!(&args[..2], ["-workspace", "Other App.xcworkspace"]);
     assert!(args.contains(&"-only-testing:ExtensionTests".into()));
@@ -682,7 +683,7 @@ fn public_diagnostics_work_without_app_configuration() {
     let contract: Value = serde_json::from_slice(&contract.stdout).unwrap();
     assert_eq!(contract["schema_version"], 1);
     assert!(contract["commands"]["qa"]["description"].is_string());
-    assert_eq!(contract["apple_store_mutations"], false);
+    assert_eq!(contract["apple_store_mutations"], true);
     assert!(execute(&["doctor"]).status.success());
     assert!(execute(&["qa", "--help"]).status.success());
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);

@@ -1,0 +1,88 @@
+name: Native app adoption rehearsal
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  onboarding:
+    name: New app onboarding and simulator QA
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build the reviewed native CLI
+        working-directory: rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          cargo build --locked --release
+      - name: Onboard the separate app without Apple credentials
+        run: >-
+          rust/target/release/ios-release --app-root examples/OrbitNotes init
+          --scheme OrbitNotes --team-id ABCDE12345 --tracking false
+          --non-exempt-encryption false --no-workflows
+      - name: Execute discovered tests and static analysis
+        run: |
+          rust/target/release/ios-release --app-root examples/OrbitNotes qa test
+          rust/target/release/ios-release --app-root examples/OrbitNotes qa analyze
+          rust/target/release/ios-release --app-root examples/OrbitNotes qa localization
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-onboarding-qa
+          path: |
+            examples/OrbitNotes/.ios-release.json
+            examples/OrbitNotes/qa-results/
+            examples/OrbitNotes/build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
+  screenshots:
+    name: New app screenshots (${{ matrix.device }})
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: iPhone 18 Pro Max
+            artifact: iphone
+          - device: iPad Pro 13-inch (M5)
+            artifact: ipad
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build the reviewed native CLI
+        working-directory: rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          cargo build --locked --release
+      - name: Initialize and configure app-owned screenshot scenarios
+        run: |
+          rust/target/release/ios-release --app-root examples/OrbitNotes init --scheme OrbitNotes --no-workflows
+          python3 - <<'PY'
+          import json, pathlib, os
+          file = pathlib.Path('examples/OrbitNotes/.ios-release.json')
+          config = json.loads(file.read_text())
+          config.update(screens=['01-notes'], locales=['en-US', 'ar-SA'], screenshot_devices=[os.environ['DEVICE']])
+          file.write_text(json.dumps(config))
+          PY
+      - name: Capture English and Arabic with the native helper
+        run: >-
+          rust/target/release/ios-release --app-root examples/OrbitNotes screenshots
+          --scheme OrbitNotes --test-target OrbitNotesUITests
+          --only-testing OrbitNotesUITests/OnboardingTests/testStoreScreenshot
+          --devices "$DEVICE" --languages en-US,ar-SA --isolated-cache
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-onboarding-screenshots-${{ matrix.artifact }}
+          path: examples/OrbitNotes/build/rust-screenshots/
+          if-no-files-found: error
+          retention-days: 14
+    env:
+      DEVICE: ${{ matrix.device }}

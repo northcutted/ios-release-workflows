@@ -1,0 +1,42 @@
+name: iOS app
+on:
+  pull_request: {}
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Prepare once, then deliver or manage that exact preparation
+        type: choice
+        options: [prepare, testflight, stage, metadata, submit, publish, phase-pause, phase-resume, phase-complete, status]
+        default: prepare
+      release_run:
+        description: Verified preparation run ID shown in the Prepare summary
+        type: string
+      version:
+        description: App version for preparation
+        type: string
+        default: '1.0.0'
+permissions:
+  contents: read
+jobs:
+  app:
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: northcutted/ios-release-workflows/.github/workflows/native-app.yml@__PLATFORM_REVISION__
+    with:
+      operation: ${{ github.event_name == 'pull_request' && 'check' || inputs.operation }}
+      release_run: ${{ inputs.release_run }}
+      version: ${{ inputs.version }}
+      platform_revision: __PLATFORM_REVISION__
+      app_root: __APP_ROOT__
+      runner: __RUNNER__
+      cli_version: __CLI_VERSION__
+    secrets:
+      IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
+      IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
+      IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
+      IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
+      IOS_RELEASE_DEMO_PASSWORD: ${{ secrets.IOS_RELEASE_DEMO_PASSWORD }}

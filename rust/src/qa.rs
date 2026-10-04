@@ -26,7 +26,7 @@ pub fn command(
         "-scheme".into(),
         app.text("scheme")?.into(),
         "-configuration".into(),
-        "Debug".into(),
+        app.configuration("test").into(),
         "-destination".into(),
         destination.into(),
         "CODE_SIGNING_ALLOWED=NO".into(),
@@ -34,6 +34,10 @@ pub fn command(
     if name == "analyze" {
         args.extend(["-sdk", "iphonesimulator", "analyze"].map(String::from));
     } else {
+        ensure!(
+            !app.names("test_targets")?.is_empty(),
+            "Add a unit test target to the shared scheme, then rerun init; release QA must execute app tests"
+        );
         args.extend(
             [
                 "-parallel-testing-enabled",
@@ -56,7 +60,10 @@ pub fn command(
         );
         args.extend(["clean", "test"].map(String::from));
     }
-    Ok(Step::new("xcodebuild", args, 2400).developer(
+    // Hosted video/codec tests can keep making progress beyond forty minutes.
+    // Bound test execution at one hour, leaving diagnostic time in the 90-minute job.
+    let deadline = if name.starts_with("test") { 3600 } else { 2400 };
+    Ok(Step::new("xcodebuild", args, deadline).developer(
         app.xcode(name == "test-compatibility")?["path"]
             .as_str()
             .context("Missing Xcode path")?,
@@ -64,6 +71,7 @@ pub fn command(
 }
 
 pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
+    let inputs_sha256 = crate::source::fingerprint(&app.root)?;
     ensure!(
         [
             "lint",
@@ -200,7 +208,7 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
     }
     fsutil::json(
         &directory.join("result.json"),
-        &json!({"check":name,"status":status,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()}),
+        &json!({"check":name,"status":status,"inputs_sha256":inputs_sha256,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()}),
     )?;
     Ok(status)
 }

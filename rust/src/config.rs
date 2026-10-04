@@ -10,6 +10,7 @@ use std::{
 pub struct App {
     pub root: PathBuf,
     pub config: Value,
+    pub config_path: PathBuf,
 }
 
 pub fn relative_path(value: &str) -> Result<PathBuf> {
@@ -58,14 +59,59 @@ pub fn strings(value: &Value) -> Result<Vec<String>> {
 impl App {
     pub fn load(root: &Path, config: &Path) -> Result<Self> {
         let root = root.canonicalize().context("App root does not exist")?;
-        let path = if config.is_absolute() {
+        let path = if config == Path::new(".github/ios-release.json")
+            && !root.join(config).exists()
+            && root.join(".ios-release.json").exists()
+        {
+            root.join(".ios-release.json")
+        } else if config.is_absolute() {
             config.to_owned()
         } else {
             root.join(config)
         };
-        let config: Value =
-            serde_json::from_slice(&fs::read(path).context("Cannot read app configuration")?)?;
-        let app = Self { root, config };
+        let mut config: Value =
+            serde_json::from_slice(&fs::read(&path).context("Cannot read app configuration")?)?;
+        if std::env::var("IOS_RELEASE_NATIVE_WORKFLOW").as_deref() == Ok("1") {
+            let workspace = PathBuf::from(
+                std::env::var_os("GITHUB_WORKSPACE").context("Hosted workspace missing")?,
+            )
+            .canonicalize()?;
+            ensure!(
+                root.starts_with(&workspace),
+                "Native workflow app root escapes its source checkout"
+            );
+            crate::fsutil::confined(&root, &path)?;
+        }
+        if config["schema_version"] == 2 {
+            let values = config
+                .as_object_mut()
+                .context("Configuration must be an object")?;
+            for (key, default) in [
+                ("localization_catalogs", serde_json::json!([])),
+                ("localization_locales", serde_json::json!([])),
+                ("locales", serde_json::json!(["en-US"])),
+                ("screens", serde_json::json!([])),
+                ("screenshot_devices", serde_json::json!([])),
+                ("metadata_path", serde_json::json!("store/metadata")),
+                ("screenshots_path", serde_json::json!("store/screenshots")),
+                ("team_id", serde_json::json!("")),
+                ("targets", serde_json::json!([])),
+                ("app_store", serde_json::json!({})),
+            ] {
+                values.entry(key).or_insert(default);
+            }
+            if !values.contains_key("compatibility") {
+                values.insert(
+                    "compatibility".into(),
+                    values.get("xcode").cloned().unwrap_or(Value::Null),
+                );
+            }
+        }
+        let app = Self {
+            root,
+            config,
+            config_path: path,
+        };
         app.validate()?;
         Ok(app)
     }
@@ -113,6 +159,9 @@ impl App {
     }
 
     fn validate(&self) -> Result<()> {
+        if self.config["schema_version"] == 2 {
+            return self.validate_v2();
+        }
         ensure!(
             self.config["schema_version"] == 1,
             "Unsupported app configuration schema"
@@ -222,5 +271,134 @@ impl App {
             "Main application target must be first"
         );
         Ok(())
+    }
+    fn validate_v2(&self) -> Result<()> {
+        let (_, project) = self.project()?;
+        relative_path(project)?;
+        ensure!(
+            !self.text("scheme")?.is_empty(),
+            "App scheme is required; run ios-release init"
+        );
+        for key in ["metadata_path", "screenshots_path"] {
+            relative_path(self.text(key)?)?;
+        }
+        for key in [
+            "test_targets",
+            "localization_catalogs",
+            "localization_locales",
+            "locales",
+            "screens",
+            "screenshot_devices",
+        ] {
+            let values = if self.config[key].is_null() {
+                Vec::new()
+            } else {
+                self.names(key)?
+            };
+            ensure!(
+                values.iter().collect::<HashSet<_>>().len() == values.len(),
+                "Duplicate configured {key}"
+            );
+            for value in values {
+                if key == "localization_catalogs" {
+                    relative_path(&value)?;
+                } else {
+                    filename(&value)?;
+                }
+            }
+        }
+        if let Some(repo) = self.config["repository"].as_str() {
+            ensure!(
+                regex::Regex::new(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")?.is_match(repo),
+                "Invalid repository"
+            );
+            if let Ok(expected) = std::env::var("GITHUB_REPOSITORY") {
+                ensure!(
+                    repo.eq_ignore_ascii_case(&expected),
+                    "Configuration belongs to another repository"
+                );
+            }
+        }
+        let mut ids = HashSet::new();
+        let bundle_pattern = regex::Regex::new(r"^[A-Za-z0-9.-]+$")?;
+        for target in self.config["targets"]
+            .as_array()
+            .context("Targets must be a list")?
+        {
+            let id = target["bundle_id"]
+                .as_str()
+                .context("Target needs a bundle ID")?;
+            ensure!(
+                bundle_pattern.is_match(id) && ids.insert(id),
+                "Invalid or duplicate bundle ID"
+            );
+        }
+        Ok(())
+    }
+    pub fn require_signing(&self) -> Result<()> {
+        ensure!(
+            self.config["app_store"]["bundle_id"] == self.config["targets"][0]["bundle_id"],
+            "Main app target must be first and match App Store bundle ID"
+        );
+        ensure!(
+            regex::Regex::new(r"^[A-Z0-9]{10}$")?.is_match(self.text("team_id")?),
+            "Set your Apple team ID with ios-release init --team-id"
+        );
+        ensure!(
+            self.config["targets"]
+                .as_array()
+                .is_some_and(|v| !v.is_empty()),
+            "Application targets must be configured"
+        );
+        Ok(())
+    }
+    pub fn require_archive(&self) -> Result<()> {
+        self.require_signing()?;
+        for target in self.config["targets"].as_array().unwrap() {
+            ensure!(
+                target["profile"].as_str().is_some_and(|s| !s.is_empty()),
+                "Missing provisioning profile; run ios-release signing sync"
+            );
+            ensure!(
+                target["entitlements"].is_object()
+                    && target["tracking"].is_boolean()
+                    && target["non_exempt_encryption"].is_boolean(),
+                "Declare each target's entitlements, tracking and encryption before archiving"
+            );
+        }
+        Ok(())
+    }
+    pub fn save(&self) -> Result<()> {
+        crate::fsutil::json(&self.config_path, &self.config)
+    }
+    pub fn configuration(&self, operation: &str) -> &str {
+        self.config["configurations"][operation]
+            .as_str()
+            .unwrap_or(if operation == "archive" {
+                "Release"
+            } else {
+                "Debug"
+            })
+    }
+    pub fn qa_checks(&self) -> Result<Vec<String>> {
+        let checks = if self.config["qa_checks"].is_null() {
+            vec!["analyze".into(), "localization".into(), "test".into()]
+        } else {
+            strings(&self.config["qa_checks"])?
+        };
+        ensure!(
+            checks.iter().any(|v| v == "test")
+                && checks.iter().all(|v| [
+                    "analyze",
+                    "localization",
+                    "test",
+                    "test-compatibility",
+                    "lint"
+                ]
+                .contains(&v.as_str()))
+                && checks.iter().collect::<HashSet<_>>().len() == checks.len(),
+            "QA checks must be unique supported checks and include app tests"
+        );
+        Ok(checks)
     }
 }

@@ -1,0 +1,3633 @@
+{
+  "info": {
+    "title": "App Store Connect API",
+    "version": "4.5",
+    "x-platforms": {
+      "app_store_connect_api": "App Store Connect API"
+    }
+  },
+  "paths": {
+    "/v1/appInfoLocalizations": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "locale": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "privacyChoicesUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "privacyPolicyText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "privacyPolicyUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "locale"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appInfo": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appInfos"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appInfo"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appInfoLocalizations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appInfoLocalizations/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[appInfoLocalizations]",
+          "fields[appInfos]",
+          "include"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "name": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "privacyChoicesUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "privacyPolicyText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "privacyPolicyUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "appInfoLocalizations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appInfos/{}/appInfoLocalizations": {
+      "GET": {
+        "query": [
+          "filter[locale]",
+          "fields[appInfoLocalizations]",
+          "fields[appInfos]",
+          "limit",
+          "include"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appScreenshotSets": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "screenshotDisplayType": {
+                      "enum": [
+                        "APP_IPHONE_67",
+                        "APP_IPHONE_61",
+                        "APP_IPHONE_65",
+                        "APP_IPHONE_58",
+                        "APP_IPHONE_55",
+                        "APP_IPHONE_47",
+                        "APP_IPHONE_40",
+                        "APP_IPHONE_35",
+                        "APP_IPAD_PRO_3GEN_129",
+                        "APP_IPAD_PRO_3GEN_11",
+                        "APP_IPAD_PRO_129",
+                        "APP_IPAD_105",
+                        "APP_IPAD_97",
+                        "APP_DESKTOP",
+                        "APP_WATCH_ULTRA",
+                        "APP_WATCH_SERIES_10",
+                        "APP_WATCH_SERIES_7",
+                        "APP_WATCH_SERIES_4",
+                        "APP_WATCH_SERIES_3",
+                        "APP_APPLE_TV",
+                        "APP_APPLE_VISION_PRO",
+                        "IMESSAGE_APP_IPHONE_67",
+                        "IMESSAGE_APP_IPHONE_61",
+                        "IMESSAGE_APP_IPHONE_65",
+                        "IMESSAGE_APP_IPHONE_58",
+                        "IMESSAGE_APP_IPHONE_55",
+                        "IMESSAGE_APP_IPHONE_47",
+                        "IMESSAGE_APP_IPHONE_40",
+                        "IMESSAGE_APP_IPAD_PRO_3GEN_129",
+                        "IMESSAGE_APP_IPAD_PRO_3GEN_11",
+                        "IMESSAGE_APP_IPAD_PRO_129",
+                        "IMESSAGE_APP_IPAD_105",
+                        "IMESSAGE_APP_IPAD_97"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "screenshotDisplayType"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appCustomProductPageLocalization": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appCustomProductPageLocalizations"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appStoreVersionExperimentTreatmentLocalization": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersionExperimentTreatmentLocalizations"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appStoreVersionLocalization": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersionLocalizations"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appScreenshotSets"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appScreenshotSets/{}/appScreenshots": {
+      "GET": {
+        "query": [
+          "fields[appScreenshots]",
+          "fields[appScreenshotSets]",
+          "limit",
+          "include"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appScreenshotSets/{}/relationships/appScreenshots": {
+      "GET": {
+        "query": [
+          "limit"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "items": {
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "appScreenshots"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appScreenshots": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "fileName": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "fileName",
+                    "fileSize"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appScreenshotSet": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appScreenshotSets"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appScreenshotSet"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appScreenshots"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appScreenshots/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[appScreenshots]",
+          "fields[appScreenshotSets]",
+          "include"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "sourceFileChecksum": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "uploaded": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "appScreenshots"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreReviewDetails": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "contactEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactFirstName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactLastName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactPhone": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountPassword": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountRequired": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appStoreVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appStoreVersion"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreReviewDetails"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreReviewDetails/{}": {
+      "GET": {
+        "query": [
+          "fields[appStoreReviewDetails]",
+          "fields[appStoreVersions]",
+          "fields[appStoreReviewAttachments]",
+          "include",
+          "limit[appStoreReviewAttachments]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "contactEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactFirstName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactLastName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contactPhone": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountPassword": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "demoAccountRequired": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreReviewDetails"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionLocalizations": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "keywords": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "locale": {
+                      "type": "string"
+                    },
+                    "marketingUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "promotionalText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "supportUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "whatsNew": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "locale"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appStoreVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appStoreVersion"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersionLocalizations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionLocalizations/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[appStoreVersionLocalizations]",
+          "fields[appStoreVersions]",
+          "fields[appScreenshotSets]",
+          "fields[appPreviewSets]",
+          "include",
+          "limit[appPreviewSets]",
+          "limit[appScreenshotSets]",
+          "limit[searchKeywords]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "keywords": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "marketingUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "promotionalText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "supportUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "whatsNew": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersionLocalizations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionLocalizations/{}/appScreenshotSets": {
+      "GET": {
+        "query": [
+          "filter[screenshotDisplayType]",
+          "filter[appCustomProductPageLocalization]",
+          "filter[appStoreVersionExperimentTreatmentLocalization]",
+          "fields[appScreenshotSets]",
+          "fields[appStoreVersionLocalizations]",
+          "fields[appCustomProductPageLocalizations]",
+          "fields[appStoreVersionExperimentTreatmentLocalizations]",
+          "fields[appScreenshots]",
+          "limit",
+          "include",
+          "limit[appScreenshots]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionPhasedReleases": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "phasedReleaseState": {
+                      "enum": [
+                        "INACTIVE",
+                        "ACTIVE",
+                        "PAUSED",
+                        "COMPLETE"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "appStoreVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appStoreVersion"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersionPhasedReleases"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionPhasedReleases/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "phasedReleaseState": {
+                      "enum": [
+                        "INACTIVE",
+                        "ACTIVE",
+                        "PAUSED",
+                        "COMPLETE"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersionPhasedReleases"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersionReleaseRequests": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "relationships": {
+                  "properties": {
+                    "appStoreVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "appStoreVersion"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersionReleaseRequests"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "copyright": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "earliestReleaseDate": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "platform": {
+                      "enum": [
+                        "IOS",
+                        "MAC_OS",
+                        "TV_OS",
+                        "VISION_OS"
+                      ],
+                      "type": "string"
+                    },
+                    "releaseType": {
+                      "enum": [
+                        "MANUAL",
+                        "AFTER_APPROVAL",
+                        "SCHEDULED"
+                      ],
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reviewType": {
+                      "enum": [
+                        "APP_STORE",
+                        "NOTARIZATION"
+                      ],
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "usesIdfa": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "versionString": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "versionString",
+                    "platform"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "app": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "apps"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "appStoreVersionLocalizations": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "appStoreVersionLocalizations"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "build": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "builds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "app"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersions"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[appStoreVersions]",
+          "fields[apps]",
+          "fields[appStoreVersionLocalizations]",
+          "fields[builds]",
+          "fields[appStoreVersionPhasedReleases]",
+          "fields[gameCenterAppVersions]",
+          "fields[routingAppCoverages]",
+          "fields[appStoreReviewDetails]",
+          "fields[appStoreVersionSubmissions]",
+          "fields[appClipDefaultExperiences]",
+          "fields[appStoreVersionExperiments]",
+          "fields[alternativeDistributionPackages]",
+          "include",
+          "limit[appStoreVersionExperiments]",
+          "limit[appStoreVersionExperimentsV2]",
+          "limit[appStoreVersionLocalizations]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "copyright": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "downloadable": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "earliestReleaseDate": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "releaseType": {
+                      "enum": [
+                        "MANUAL",
+                        "AFTER_APPROVAL",
+                        "SCHEDULED"
+                      ],
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reviewType": {
+                      "enum": [
+                        "APP_STORE",
+                        "NOTARIZATION"
+                      ],
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "usesIdfa": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "versionString": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "relationships": {
+                  "properties": {
+                    "appClipDefaultExperience": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appClipDefaultExperiences"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "build": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "builds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "appStoreVersions"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}/appStoreReviewDetail": {
+      "GET": {
+        "query": [
+          "fields[appStoreReviewDetails]",
+          "fields[appStoreVersions]",
+          "fields[appStoreReviewAttachments]",
+          "include",
+          "limit[appStoreReviewAttachments]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}/appStoreVersionLocalizations": {
+      "GET": {
+        "query": [
+          "filter[locale]",
+          "fields[appStoreVersionLocalizations]",
+          "fields[appStoreVersions]",
+          "fields[appScreenshotSets]",
+          "fields[appPreviewSets]",
+          "fields[appKeywords]",
+          "limit",
+          "include",
+          "limit[appScreenshotSets]",
+          "limit[appPreviewSets]",
+          "limit[searchKeywords]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}/appStoreVersionPhasedRelease": {
+      "GET": {
+        "query": [
+          "fields[appStoreVersionPhasedReleases]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}/build": {
+      "GET": {
+        "query": [
+          "fields[builds]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/appStoreVersions/{}/relationships/build": {
+      "GET": {
+        "query": [],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "builds"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/apps": {
+      "GET": {
+        "query": [
+          "filter[name]",
+          "filter[bundleId]",
+          "filter[sku]",
+          "filter[appStoreVersions.appStoreState]",
+          "filter[appStoreVersions.platform]",
+          "filter[appStoreVersions.appVersionState]",
+          "filter[reviewSubmissions.state]",
+          "filter[reviewSubmissions.platform]",
+          "filter[appStoreVersions]",
+          "filter[id]",
+          "exists[gameCenterEnabledVersions]",
+          "sort",
+          "fields[apps]",
+          "fields[appEncryptionDeclarations]",
+          "fields[buildIcons]",
+          "fields[ciProducts]",
+          "fields[betaGroups]",
+          "fields[appStoreVersions]",
+          "fields[preReleaseVersions]",
+          "fields[betaAppLocalizations]",
+          "fields[builds]",
+          "fields[betaLicenseAgreements]",
+          "fields[betaAppReviewDetails]",
+          "fields[appInfos]",
+          "fields[appClips]",
+          "fields[endUserLicenseAgreements]",
+          "fields[inAppPurchases]",
+          "fields[subscriptionGroups]",
+          "fields[gameCenterEnabledVersions]",
+          "fields[appCustomProductPages]",
+          "fields[promotedPurchases]",
+          "fields[appEvents]",
+          "fields[reviewSubmissions]",
+          "fields[subscriptionGracePeriods]",
+          "fields[gameCenterDetails]",
+          "fields[appStoreVersionExperiments]",
+          "fields[androidToIosAppMappingDetails]",
+          "limit",
+          "include",
+          "limit[androidToIosAppMappingDetails]",
+          "limit[appClips]",
+          "limit[appCustomProductPages]",
+          "limit[appEncryptionDeclarations]",
+          "limit[appEvents]",
+          "limit[appInfos]",
+          "limit[appStoreVersionExperimentsV2]",
+          "limit[appStoreVersions]",
+          "limit[betaAppLocalizations]",
+          "limit[betaGroups]",
+          "limit[builds]",
+          "limit[gameCenterEnabledVersions]",
+          "limit[inAppPurchases]",
+          "limit[inAppPurchasesV2]",
+          "limit[preReleaseVersions]",
+          "limit[promotedPurchases]",
+          "limit[reviewSubmissions]",
+          "limit[subscriptionGroups]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/appInfos": {
+      "GET": {
+        "query": [
+          "fields[appInfos]",
+          "fields[apps]",
+          "fields[ageRatingDeclarations]",
+          "fields[appInfoLocalizations]",
+          "fields[appCategories]",
+          "limit",
+          "include",
+          "limit[appInfoLocalizations]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/appStoreVersions": {
+      "GET": {
+        "query": [
+          "filter[platform]",
+          "filter[versionString]",
+          "filter[appStoreState]",
+          "filter[appVersionState]",
+          "filter[id]",
+          "fields[appStoreVersions]",
+          "fields[apps]",
+          "fields[appStoreVersionLocalizations]",
+          "fields[builds]",
+          "fields[appStoreVersionPhasedReleases]",
+          "fields[gameCenterAppVersions]",
+          "fields[routingAppCoverages]",
+          "fields[appStoreReviewDetails]",
+          "fields[appStoreVersionSubmissions]",
+          "fields[appClipDefaultExperiences]",
+          "fields[appStoreVersionExperiments]",
+          "fields[alternativeDistributionPackages]",
+          "limit",
+          "include",
+          "limit[appStoreVersionLocalizations]",
+          "limit[appStoreVersionExperiments]",
+          "limit[appStoreVersionExperimentsV2]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/betaGroups": {
+      "GET": {
+        "query": [
+          "fields[betaGroups]",
+          "limit"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/buildUploads": {
+      "GET": {
+        "query": [
+          "filter[cfBundleShortVersionString]",
+          "filter[cfBundleVersion]",
+          "filter[platform]",
+          "filter[state]",
+          "sort",
+          "fields[buildUploads]",
+          "fields[builds]",
+          "fields[buildUploadFiles]",
+          "limit",
+          "include"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/reviewSubmissions": {
+      "GET": {
+        "query": [
+          "filter[platform]",
+          "filter[state]",
+          "fields[reviewSubmissions]",
+          "fields[apps]",
+          "fields[reviewSubmissionItems]",
+          "fields[appStoreVersions]",
+          "fields[actors]",
+          "limit",
+          "include",
+          "limit[items]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/betaAppReviewSubmissions": {
+      "GET": {
+        "query": [
+          "filter[betaReviewState]",
+          "filter[build]",
+          "fields[betaAppReviewSubmissions]",
+          "fields[builds]",
+          "limit",
+          "include"
+        ],
+        "required_query": [
+          "filter[build]"
+        ]
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "relationships": {
+                  "properties": {
+                    "build": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "builds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "build"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "betaAppReviewSubmissions"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/betaGroups": {
+      "GET": {
+        "query": [
+          "filter[name]",
+          "filter[isInternalGroup]",
+          "filter[publicLinkEnabled]",
+          "filter[publicLinkLimitEnabled]",
+          "filter[publicLink]",
+          "filter[app]",
+          "filter[builds]",
+          "filter[id]",
+          "sort",
+          "fields[betaGroups]",
+          "fields[apps]",
+          "fields[builds]",
+          "fields[betaTesters]",
+          "fields[betaRecruitmentCriteria]",
+          "limit",
+          "include",
+          "limit[betaTesters]",
+          "limit[builds]"
+        ],
+        "required_query": []
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "feedbackEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "hasAccessToAllBuilds": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "isInternalGroup": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "publicLinkEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "publicLinkLimit": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "publicLinkLimitEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "app": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "apps"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "betaTesters": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "betaTesters"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "builds": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "builds"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "app"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "betaGroups"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/betaGroups/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[betaGroups]",
+          "fields[apps]",
+          "fields[builds]",
+          "fields[betaTesters]",
+          "fields[betaRecruitmentCriteria]",
+          "include",
+          "limit[betaTesters]",
+          "limit[builds]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "feedbackEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "iosBuildsAvailableForAppleSiliconMac": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "iosBuildsAvailableForAppleVision": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "publicLinkEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "publicLinkLimit": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "publicLinkLimitEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "betaGroups"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/betaGroups/{}/builds": {
+      "GET": {
+        "query": [
+          "fields[builds]",
+          "limit"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/betaGroups/{}/relationships/builds": {
+      "DELETE": {
+        "body": {
+          "properties": {
+            "data": {
+              "items": {
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "builds"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "limit"
+        ],
+        "required_query": []
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "items": {
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "builds"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/buildUploadFiles": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "assetType": {
+                      "enum": [
+                        "ASSET",
+                        "ASSET_DESCRIPTION",
+                        "ASSET_SPI"
+                      ],
+                      "type": "string"
+                    },
+                    "fileName": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "uti": {
+                      "enum": [
+                        "com.apple.binary-property-list",
+                        "com.apple.ipa",
+                        "com.apple.pkg",
+                        "com.apple.xml-property-list",
+                        "com.pkware.zip-archive"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fileName",
+                    "fileSize",
+                    "uti",
+                    "assetType"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "buildUpload": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "buildUploads"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "buildUpload"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "buildUploadFiles"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/buildUploadFiles/{}": {
+      "GET": {
+        "query": [
+          "fields[buildUploadFiles]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "sourceFileChecksums": {
+                      "properties": {
+                        "composite": {
+                          "properties": {
+                            "algorithm": {
+                              "enum": [
+                                "MD5"
+                              ],
+                              "type": "string"
+                            },
+                            "hash": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "file": {
+                          "properties": {
+                            "algorithm": {
+                              "enum": [
+                                "MD5",
+                                "SHA_256"
+                              ],
+                              "type": "string"
+                            },
+                            "hash": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "uploaded": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "buildUploadFiles"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/buildUploads": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "cfBundleShortVersionString": {
+                      "type": "string"
+                    },
+                    "cfBundleVersion": {
+                      "type": "string"
+                    },
+                    "platform": {
+                      "enum": [
+                        "IOS",
+                        "MAC_OS",
+                        "TV_OS",
+                        "VISION_OS"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "cfBundleVersion",
+                    "cfBundleShortVersionString",
+                    "platform"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "app": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "apps"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "app"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "buildUploads"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/buildUploads/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[buildUploads]",
+          "fields[builds]",
+          "fields[buildUploadFiles]",
+          "include"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/builds": {
+      "GET": {
+        "query": [
+          "filter[version]",
+          "filter[expired]",
+          "filter[processingState]",
+          "filter[betaAppReviewSubmission.betaReviewState]",
+          "filter[usesNonExemptEncryption]",
+          "filter[preReleaseVersion.version]",
+          "filter[preReleaseVersion.platform]",
+          "filter[buildAudienceType]",
+          "filter[preReleaseVersion]",
+          "filter[app]",
+          "filter[betaGroups]",
+          "filter[appStoreVersion]",
+          "filter[id]",
+          "exists[usesNonExemptEncryption]",
+          "sort",
+          "fields[builds]",
+          "fields[preReleaseVersions]",
+          "fields[betaTesters]",
+          "fields[betaGroups]",
+          "fields[betaBuildLocalizations]",
+          "fields[appEncryptionDeclarations]",
+          "fields[betaAppReviewSubmissions]",
+          "fields[apps]",
+          "fields[buildBetaDetails]",
+          "fields[appStoreVersions]",
+          "fields[buildIcons]",
+          "fields[buildBundles]",
+          "fields[buildUploads]",
+          "limit",
+          "include",
+          "limit[betaBuildLocalizations]",
+          "limit[betaGroups]",
+          "limit[buildBundles]",
+          "limit[icons]",
+          "limit[individualTesters]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/builds/{}": {
+      "GET": {
+        "query": [
+          "fields[builds]",
+          "fields[preReleaseVersions]",
+          "fields[betaTesters]",
+          "fields[betaGroups]",
+          "fields[betaBuildLocalizations]",
+          "fields[appEncryptionDeclarations]",
+          "fields[betaAppReviewSubmissions]",
+          "fields[apps]",
+          "fields[buildBetaDetails]",
+          "fields[appStoreVersions]",
+          "fields[buildIcons]",
+          "fields[buildBundles]",
+          "fields[buildUploads]",
+          "include",
+          "limit[betaBuildLocalizations]",
+          "limit[betaGroups]",
+          "limit[buildBundles]",
+          "limit[icons]",
+          "limit[individualTesters]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "expired": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "usesNonExemptEncryption": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "relationships": {
+                  "properties": {
+                    "appEncryptionDeclaration": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appEncryptionDeclarations"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "builds"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/builds/{}/betaAppReviewSubmission": {
+      "GET": {
+        "query": [
+          "fields[betaAppReviewSubmissions]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/bundleIdCapabilities": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "capabilityType": {
+                      "enum": [
+                        "ICLOUD",
+                        "IN_APP_PURCHASE",
+                        "GAME_CENTER",
+                        "PUSH_NOTIFICATIONS",
+                        "WALLET",
+                        "INTER_APP_AUDIO",
+                        "MAPS",
+                        "ASSOCIATED_DOMAINS",
+                        "PERSONAL_VPN",
+                        "APP_GROUPS",
+                        "HEALTHKIT",
+                        "HOMEKIT",
+                        "WIRELESS_ACCESSORY_CONFIGURATION",
+                        "APPLE_PAY",
+                        "DATA_PROTECTION",
+                        "SIRIKIT",
+                        "NETWORK_EXTENSIONS",
+                        "MULTIPATH",
+                        "HOT_SPOT",
+                        "NFC_TAG_READING",
+                        "CLASSKIT",
+                        "AUTOFILL_CREDENTIAL_PROVIDER",
+                        "ACCESS_WIFI_INFORMATION",
+                        "NETWORK_CUSTOM_PROTOCOL",
+                        "COREMEDIA_HLS_LOW_LATENCY",
+                        "SYSTEM_EXTENSION_INSTALL",
+                        "USER_MANAGEMENT",
+                        "APPLE_ID_AUTH"
+                      ],
+                      "type": "string"
+                    },
+                    "settings": {
+                      "items": {
+                        "properties": {
+                          "allowedInstances": {
+                            "enum": [
+                              "ENTRY",
+                              "SINGLE",
+                              "MULTIPLE"
+                            ],
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "enabledByDefault": {
+                            "type": "boolean"
+                          },
+                          "key": {
+                            "enum": [
+                              "ICLOUD_VERSION",
+                              "DATA_PROTECTION_PERMISSION_LEVEL",
+                              "APPLE_ID_AUTH_APP_CONSENT"
+                            ],
+                            "type": "string"
+                          },
+                          "minInstances": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "options": {
+                            "items": {
+                              "properties": {
+                                "description": {
+                                  "type": "string"
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "enabledByDefault": {
+                                  "type": "boolean"
+                                },
+                                "key": {
+                                  "enum": [
+                                    "XCODE_5",
+                                    "XCODE_6",
+                                    "COMPLETE_PROTECTION",
+                                    "PROTECTED_UNLESS_OPEN",
+                                    "PROTECTED_UNTIL_FIRST_USER_AUTH",
+                                    "PRIMARY_APP_CONSENT"
+                                  ],
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "supportsWildcard": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "visible": {
+                            "type": "boolean"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "nullable": true,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "capabilityType"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "bundleId": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "bundleIds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "bundleId"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "bundleIdCapabilities"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/bundleIds": {
+      "GET": {
+        "query": [
+          "filter[name]",
+          "filter[platform]",
+          "filter[identifier]",
+          "filter[seedId]",
+          "filter[id]",
+          "sort",
+          "fields[bundleIds]",
+          "fields[profiles]",
+          "fields[bundleIdCapabilities]",
+          "fields[apps]",
+          "limit",
+          "include",
+          "limit[bundleIdCapabilities]",
+          "limit[profiles]"
+        ],
+        "required_query": []
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "identifier": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "platform": {
+                      "enum": [
+                        "IOS",
+                        "MAC_OS",
+                        "UNIVERSAL"
+                      ],
+                      "type": "string"
+                    },
+                    "seedId": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "identifier",
+                    "name",
+                    "platform"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "bundleIds"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/bundleIds/{}/bundleIdCapabilities": {
+      "GET": {
+        "query": [
+          "fields[bundleIdCapabilities]",
+          "limit"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/certificates": {
+      "GET": {
+        "query": [
+          "filter[displayName]",
+          "filter[certificateType]",
+          "filter[serialNumber]",
+          "filter[id]",
+          "sort",
+          "fields[certificates]",
+          "fields[passTypeIds]",
+          "limit",
+          "include"
+        ],
+        "required_query": []
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "certificateType": {
+                      "enum": [
+                        "APPLE_PAY",
+                        "APPLE_PAY_MERCHANT_IDENTITY",
+                        "APPLE_PAY_PSP_IDENTITY",
+                        "APPLE_PAY_RSA",
+                        "DEVELOPER_ID_KEXT",
+                        "DEVELOPER_ID_KEXT_G2",
+                        "DEVELOPER_ID_APPLICATION",
+                        "DEVELOPER_ID_APPLICATION_G2",
+                        "DEVELOPMENT",
+                        "DISTRIBUTION",
+                        "IDENTITY_ACCESS",
+                        "IOS_DEVELOPMENT",
+                        "IOS_DISTRIBUTION",
+                        "MAC_APP_DISTRIBUTION",
+                        "MAC_INSTALLER_DISTRIBUTION",
+                        "MAC_APP_DEVELOPMENT",
+                        "PASS_TYPE_ID",
+                        "PASS_TYPE_ID_WITH_NFC"
+                      ],
+                      "type": "string"
+                    },
+                    "csrContent": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "csrContent",
+                    "certificateType"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "merchantId": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "merchantIds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "passTypeId": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "passTypeIds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "certificates"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/profiles": {
+      "GET": {
+        "query": [
+          "filter[name]",
+          "filter[profileType]",
+          "filter[profileState]",
+          "filter[id]",
+          "sort",
+          "fields[profiles]",
+          "fields[bundleIds]",
+          "fields[devices]",
+          "fields[certificates]",
+          "limit",
+          "include",
+          "limit[certificates]",
+          "limit[devices]"
+        ],
+        "required_query": []
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "profileType": {
+                      "enum": [
+                        "IOS_APP_DEVELOPMENT",
+                        "IOS_APP_STORE",
+                        "IOS_APP_ADHOC",
+                        "IOS_APP_INHOUSE",
+                        "MAC_APP_DEVELOPMENT",
+                        "MAC_APP_STORE",
+                        "MAC_APP_DIRECT",
+                        "TVOS_APP_DEVELOPMENT",
+                        "TVOS_APP_STORE",
+                        "TVOS_APP_ADHOC",
+                        "TVOS_APP_INHOUSE",
+                        "MAC_CATALYST_APP_DEVELOPMENT",
+                        "MAC_CATALYST_APP_STORE",
+                        "MAC_CATALYST_APP_DIRECT"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profileType",
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "bundleId": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "bundleIds"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "certificates": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "certificates"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "devices": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "devices"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "certificates",
+                    "bundleId"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "profiles"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/profiles/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[profiles]",
+          "fields[bundleIds]",
+          "fields[devices]",
+          "fields[certificates]",
+          "include",
+          "limit[certificates]",
+          "limit[devices]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/reviewSubmissionItems": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "relationships": {
+                  "properties": {
+                    "appCustomProductPageVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appCustomProductPageVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appEvent": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appEvents"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appStoreVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appStoreVersionExperiment": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersionExperiments"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appStoreVersionExperimentV2": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appStoreVersionExperiments"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "backgroundAssetVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "backgroundAssetVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "gameCenterAchievementVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "gameCenterAchievementVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "gameCenterActivityVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "gameCenterActivityVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "gameCenterChallengeVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "gameCenterChallengeVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "gameCenterLeaderboardSetVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "gameCenterLeaderboardSetVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "gameCenterLeaderboardVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "gameCenterLeaderboardVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "inAppPurchaseVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "inAppPurchaseVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "reviewSubmission": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "reviewSubmissions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "subscriptionGroupVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "subscriptionGroupVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "subscriptionVersion": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "subscriptionVersions"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "reviewSubmission"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "reviewSubmissionItems"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/reviewSubmissions": {
+      "GET": {
+        "query": [
+          "filter[platform]",
+          "filter[state]",
+          "filter[app]",
+          "fields[reviewSubmissions]",
+          "fields[apps]",
+          "fields[reviewSubmissionItems]",
+          "fields[appStoreVersions]",
+          "fields[actors]",
+          "limit",
+          "include",
+          "limit[items]"
+        ],
+        "required_query": [
+          "filter[app]"
+        ]
+      },
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "platform": {
+                      "enum": [
+                        "IOS",
+                        "MAC_OS",
+                        "TV_OS",
+                        "VISION_OS"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "app": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "apps"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "app"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "reviewSubmissions"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/reviewSubmissions/{}": {
+      "GET": {
+        "query": [
+          "fields[reviewSubmissions]",
+          "fields[apps]",
+          "fields[reviewSubmissionItems]",
+          "fields[appStoreVersions]",
+          "fields[actors]",
+          "include",
+          "limit[items]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "canceled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "platform": {
+                      "enum": [
+                        "IOS",
+                        "MAC_OS",
+                        "TV_OS",
+                        "VISION_OS"
+                      ],
+                      "type": "string"
+                    },
+                    "submitted": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "reviewSubmissions"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/reviewSubmissions/{}/items": {
+      "GET": {
+        "query": [
+          "fields[reviewSubmissionItems]",
+          "fields[appStoreVersions]",
+          "fields[appCustomProductPageVersions]",
+          "fields[appStoreVersionExperiments]",
+          "fields[appEvents]",
+          "fields[backgroundAssetVersions]",
+          "fields[gameCenterAchievementVersions]",
+          "fields[gameCenterActivityVersions]",
+          "fields[gameCenterChallengeVersions]",
+          "fields[gameCenterLeaderboardSetVersions]",
+          "fields[gameCenterLeaderboardVersions]",
+          "fields[inAppPurchaseVersions]",
+          "fields[subscriptionVersions]",
+          "fields[subscriptionGroupVersions]",
+          "limit",
+          "include"
+        ],
+        "required_query": []
+      }
+    }
+  },
+  "source": "https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip",
+  "spec_sha256": "b65954275e4568fa98725e517c5edb884ebd4d2fe0bbee5e44c133b2ef5feaf7"
+}

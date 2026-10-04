@@ -48,6 +48,12 @@ pub fn sha256(path: &Path) -> Result<String> {
 }
 
 pub fn confined(root: &Path, path: &Path) -> Result<()> {
+    ensure!(
+        !path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir)),
+        "Output paths cannot contain parent traversal"
+    );
     let root = root.canonicalize()?;
     let mut existing = path;
     while !existing.exists() {

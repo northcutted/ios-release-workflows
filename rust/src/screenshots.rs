@@ -72,7 +72,7 @@ pub fn build_step(app: &App, options: &Options, id: &str, products: &Path) -> Re
         "-scheme".into(),
         options.scheme.clone(),
         "-configuration".into(),
-        "Debug".into(),
+        app.configuration("test").into(),
         "-sdk".into(),
         "iphonesimulator".into(),
         "-destination".into(),
@@ -193,6 +193,10 @@ pub fn configure_test_run(path: &Path, target: &str, home: &Path) -> Result<()> 
 pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result<()> {
     options.validate(app)?;
     ensure!(
+        !app.names("screens")?.is_empty(),
+        "Configure the screenshot names produced by your UI tests; an empty capture cannot verify store assets"
+    );
+    ensure!(
         options.isolated_cache
             || (std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
                 && std::env::var("RUNNER_ENVIRONMENT").as_deref() == Ok("github-hosted")),
@@ -266,6 +270,7 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
         );
         let test_run = &candidates[0];
         configure_test_run(test_run, &options.test_target, &home)?;
+        configure_capture_device(test_run, device)?;
         for locale in &options.languages {
             fsutil::atomic(&cache.join("language.txt"), locale.as_bytes())?;
             fsutil::atomic(&cache.join("locale.txt"), locale.as_bytes())?;
@@ -378,7 +383,10 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
                     "Missing screenshot {filename}; refusing stale output"
                 );
                 validate_png(app, device, &source)?;
-                fsutil::atomic(&locale_output.join(filename), &fs::read(source)?)?;
+                fsutil::atomic(
+                    &locale_output.join(filename),
+                    &crate::images::store_png(&fs::read(source)?)?,
+                )?;
             }
         }
     }
@@ -396,6 +404,27 @@ pub fn run(app: &App, options: &Options, executor: &mut impl Executor) -> Result
         "{}",
         json!({"output":output,"evidence":job,"captures":records})
     );
+    Ok(())
+}
+
+pub fn configure_capture_device(path: &Path, device: &str) -> Result<()> {
+    fn walk(value: &mut plist::Value, device: &str) {
+        if let Some(dict) = value.as_dictionary_mut() {
+            if dict.contains_key("IOS_RELEASE_SNAPSHOT_HOME") {
+                dict.insert("IOS_RELEASE_SNAPSHOT_DEVICE".into(), device.into());
+            }
+            for value in dict.values_mut() {
+                walk(value, device);
+            }
+        } else if let Some(list) = value.as_array_mut() {
+            for value in list {
+                walk(value, device);
+            }
+        }
+    }
+    let mut value = plist::Value::from_file(path)?;
+    walk(&mut value, device);
+    value.to_file_xml(path)?;
     Ok(())
 }
 
@@ -496,6 +525,15 @@ pub fn validate_png(app: &App, device: &str, path: &Path) -> Result<()> {
         u32::from_be_bytes(header[16..20].try_into()?),
         u32::from_be_bytes(header[20..24].try_into()?),
     ];
+    if app.config["schema_version"] == 2 && !app.config["screenshot_classes"].is_object() {
+        let kind = crate::metadata::display_type(size[0], size[1])?;
+        ensure!(
+            (device.starts_with("iPhone") && kind.starts_with("APP_IPHONE"))
+                || (device.starts_with("iPad") && kind.starts_with("APP_IPAD")),
+            "Screenshot belongs to another device family"
+        );
+        return Ok(());
+    }
     let classes = app.config["screenshot_classes"]
         .as_object()
         .context("Missing screenshot dimensions policy")?;

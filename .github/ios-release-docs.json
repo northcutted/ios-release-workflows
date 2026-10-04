@@ -8,6 +8,7 @@
     "docs"
   ],
   "navigation": [
+    {"label":"Native CLI quickstart","path":"docs/native-quickstart.md"},
     {
       "label": "Start here",
       "path": "README.md"

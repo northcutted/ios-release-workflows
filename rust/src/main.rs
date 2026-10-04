@@ -1,18 +1,19 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use ios_release_native::{
-    archive, config::App, fsutil, process::Native, qa, results, screenshots, toolchain,
+    api::Apple, archive, config::App, fsutil, metadata, onboarding, process::Native, qa, release,
+    results, screenshots, signing, store, toolchain,
 };
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Native iOS build and simulator automation; explicit opt-in, no legacy workflow changes"
+    about = "Native iOS signing, QA, TestFlight and App Store releases"
 )]
 struct Cli {
-    #[arg(long, global = true, default_value = ".")]
+    #[arg(long, global = true, env = "IOS_APP_ROOT", default_value = ".")]
     app_root: PathBuf,
     #[arg(
         long,
@@ -35,6 +36,53 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Github {
+        #[command(subcommand)]
+        action: Github,
+    },
+    Init {
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long)]
+        scheme: Option<String>,
+        #[arg(long)]
+        team_id: Option<String>,
+        #[arg(long)]
+        repository: Option<String>,
+        #[arg(long)]
+        xcode: Option<String>,
+        #[arg(long)]
+        no_workflows: bool,
+        #[arg(long,action=clap::ArgAction::Set)]
+        tracking: Option<bool>,
+        #[arg(long,action=clap::ArgAction::Set)]
+        non_exempt_encryption: Option<bool>,
+        #[arg(long, help = "Hosted macOS runner for the generated Actions workflow")]
+        runner: Option<String>,
+        #[arg(long,default_value=env!("IOS_RELEASE_BUILD_REVISION"))]
+        platform_revision: String,
+    },
+    Auth {
+        #[command(subcommand)]
+        action: Auth,
+    },
+    Signing {
+        #[command(subcommand)]
+        action: Signing,
+    },
+    Release {
+        #[command(subcommand)]
+        action: Release,
+    },
+    Store {
+        #[command(subcommand)]
+        action: Store,
+        #[arg(long, global = true, default_value = "build/native-release")]
+        release: PathBuf,
+    },
+    Status,
     Doctor {
         #[arg(long)]
         xcode: bool,
@@ -48,7 +96,7 @@ enum Commands {
         destinations_json: bool,
     },
     Qa {
-        #[arg(value_parser = ["lint", "localization", "analyze", "test", "test-compatibility"])]
+        #[arg(value_parser = ["all", "lint", "localization", "analyze", "test", "test-compatibility"])]
         check: String,
     },
     Test,
@@ -90,6 +138,132 @@ enum Commands {
     },
 }
 
+#[derive(Subcommand)]
+enum Auth {
+    Login {
+        #[arg(long)]
+        key_id: String,
+        #[arg(long)]
+        issuer_id: String,
+        #[arg(long)]
+        key_file: PathBuf,
+    },
+    Status,
+}
+#[derive(Subcommand)]
+enum Signing {
+    Export {
+        #[arg(long, default_value = "build/native-signing/signing.json")]
+        output: PathBuf,
+    },
+    Apply {
+        #[arg(long)]
+        input: PathBuf,
+    },
+    Import {
+        #[arg(long)]
+        p12: PathBuf,
+        #[arg(long, default_value = "IOS_RELEASE_P12_PASSWORD")]
+        password_env: String,
+    },
+    Sync {
+        #[arg(long)]
+        no_project_changes: bool,
+    },
+    Status,
+    ConfigureProject,
+}
+#[derive(Subcommand)]
+enum Release {
+    Build {
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        build_number: String,
+        #[arg(long)]
+        installed_signing: bool,
+    },
+    VerifyArchive {
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        build_number: String,
+    },
+    Pack {
+        #[arg(long, default_value = "build/native-release")]
+        release: PathBuf,
+        #[arg(long, default_value = "build/native-release.zip")]
+        output: PathBuf,
+    },
+    Prepare {
+        #[arg(long, default_value = "1.0.0")]
+        version: String,
+        #[arg(long)]
+        build_number: Option<String>,
+        #[arg(long)]
+        installed_signing: bool,
+    },
+    Seal {
+        #[arg(long)]
+        version: String,
+        #[arg(long)]
+        build_number: String,
+        #[arg(long, default_value = "build/native-release")]
+        output: PathBuf,
+    },
+    NextBuildNumber,
+}
+#[derive(Subcommand)]
+enum Store {
+    BetaGroups {
+        #[arg(long)]
+        create: Option<String>,
+        #[arg(long, requires = "create")]
+        external: bool,
+    },
+    Validate,
+    Publish {
+        #[arg(long)]
+        confirm: bool,
+    },
+    Phased {
+        #[arg(value_parser=["ACTIVE","PAUSED","COMPLETE"])]
+        state: String,
+    },
+    Status,
+    Upload,
+    Wait {
+        #[arg(long, default_value_t = 3600)]
+        timeout: u64,
+    },
+    Testflight,
+    Stage,
+    Metadata,
+    Submit {
+        #[arg(long)]
+        confirm: bool,
+    },
+}
+#[derive(Subcommand)]
+enum Github {
+    Controls {
+        #[arg(long, default_value = "xcode-27")]
+        runner: String,
+    },
+    Fetch {
+        #[arg(long)]
+        run: u64,
+        #[arg(long, default_value = "build/native-release")]
+        output: PathBuf,
+        #[arg(long)]
+        github_output: bool,
+    },
+    Setup {
+        #[arg(long)]
+        reviewer: Option<String>,
+    },
+}
+
 fn main() {
     match run(Cli::parse()) {
         Ok(status) => std::process::exit(status),
@@ -114,7 +288,14 @@ fn run(cli: Cli) -> Result<i32> {
                     "screenshots":{"description":"Capture app-owned screenshot scenarios using compiled tests"},
                     "screenshots-capture":{"description":"Compatibility alias for screenshots"},
                     "xcresult-report":{"description":"Reconcile exported XCTest summary and cases"}
-                },"apple_store_mutations":false})
+                    ,"init":{"description":"Discover a native app and create its configuration and pinned GitHub Actions"}
+                    ,"auth":{"description":"Save an App Store Connect team API key privately"}
+                    ,"signing":{"description":"Manage owned distribution certificates, renewable profiles and encrypted signing assets"}
+                    ,"release":{"description":"Prepare and seal QA-verified releases with an exact IPA identity"}
+                    ,"store":{"description":"Upload, reconcile processing, stage metadata and request App Review"}
+                    ,"status":{"description":"Read production and TestFlight status"}
+                    ,"github":{"description":"Configure protected Actions and authenticate prepared releases and recovery receipts"}
+                },"apple_store_mutations":true})
             )?
         );
         return Ok(0);
@@ -124,10 +305,72 @@ fn run(cli: Cli) -> Result<i32> {
         println!();
         return Ok(0);
     };
+    if let Commands::Init {
+        project,
+        workspace,
+        scheme,
+        team_id,
+        repository,
+        xcode,
+        no_workflows,
+        platform_revision,
+        tracking,
+        non_exempt_encryption,
+        runner,
+    } = &command
+    {
+        let options = onboarding::Options {
+            project: project.clone(),
+            workspace: workspace.clone(),
+            scheme: scheme.clone(),
+            team: team_id.clone(),
+            repository: repository.clone(),
+            xcode: xcode.clone(),
+            no_workflows: *no_workflows,
+            platform_revision: platform_revision.clone(),
+            tracking: *tracking,
+            non_exempt_encryption: *non_exempt_encryption,
+            runner: runner.clone(),
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&onboarding::init(
+                &cli.app_root,
+                &options,
+                &mut Native,
+                cli.plan
+            )?)?
+        );
+        return Ok(0);
+    }
+    if let Commands::Auth { action } = &command {
+        if cli.plan {
+            println!(
+                "{}",
+                json!({"operation":"auth","writes_private_user_credentials":matches!(action,Auth::Login{..}),"apple_mutations":false})
+            );
+            return Ok(0);
+        }
+        match action {
+            Auth::Login {
+                key_id,
+                issuer_id,
+                key_file,
+            } => onboarding::login(key_id, issuer_id, key_file)?,
+            Auth::Status => {
+                let value = onboarding::local_credentials()?;
+                println!(
+                    "{}",
+                    json!({"key_id":value["key_id"],"issuer_id":value["issuer_id"],"private_key":"saved privately"})
+                );
+            }
+        }
+        return Ok(0);
+    }
     if matches!(command, Commands::Doctor { xcode: false }) {
         println!(
             "{}",
-            json!({"implementation":"rust","version":env!("CARGO_PKG_VERSION"),"runtime_dependencies":[],"native_builds_require":"macOS and the configured Xcode","legacy_workflows":"unchanged"})
+            json!({"implementation":"rust","version":env!("CARGO_PKG_VERSION"),"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"runtime_dependencies":[],"native_builds_require":"macOS and the configured Xcode","legacy_workflows":"unchanged"})
         );
         return Ok(0);
     }
@@ -141,9 +384,226 @@ fn run(cli: Cli) -> Result<i32> {
         );
         return Ok(0);
     }
-    let app = App::load(&cli.app_root, &cli.config)?;
+    let mut app = App::load(&cli.app_root, &cli.config)?;
     let mut executor = Native;
     match command {
+        Commands::Github { action } => match action {
+            Github::Controls { runner } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-controls","runner":runner,"branch":"main","production_requires_reviewers":true})
+                    );
+                } else {
+                    ios_release_native::github::controls(&app, &runner, &mut executor)?;
+                }
+            }
+            Github::Fetch {
+                run,
+                output,
+                github_output,
+            } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, attestation, manifest and receipt identity"})
+                    );
+                } else {
+                    let manifest = ios_release_native::github::fetch(
+                        &app,
+                        run,
+                        &app.root.join(output),
+                        &mut executor,
+                    )?;
+                    if github_output {
+                        let path = std::env::var("GITHUB_OUTPUT")
+                            .context("--github-output requires GITHUB_OUTPUT")?;
+                        ios_release_native::github::selection_output(&manifest, Path::new(&path))?;
+                    }
+                }
+            }
+            Github::Setup { reviewer } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"github-setup","repository":app.config["repository"],"environments":["native-signing-admin","native-signing","native-app-store","native-production"],"production_reviewers":reviewer,"branch":"main"})
+                    );
+                } else {
+                    ios_release_native::github::setup(&app, reviewer.as_deref(), &mut executor)?;
+                }
+            }
+        },
+        Commands::Signing { action } => {
+            if cli.plan {
+                println!(
+                    "{}",
+                    json!({"operation":"signing","certificate_policy":"reuse owned valid certificates; renew before expiry; never revoke unrelated certificates","targets":app.config["targets"],"vault":signing::path(&app)?})
+                );
+                return Ok(0);
+            }
+            match action {
+                Signing::Export { output } => {
+                    ios_release_native::signing_inputs::export(&app, &app.root.join(output))?
+                }
+                Signing::Apply { input } => {
+                    ios_release_native::signing_inputs::apply(&app, &app.root.join(input))?
+                }
+                Signing::Import { p12, password_env } => {
+                    signing::import(&app, &p12, &password_env, &mut executor)?
+                }
+                Signing::Sync { no_project_changes } => {
+                    signing::sync(&mut app, &mut Apple::new()?, &mut executor)?;
+                    if app.config["schema_version"] == 2 && !no_project_changes {
+                        ios_release_native::project::configure(&app)?;
+                    }
+                }
+                Signing::Status => {
+                    println!("{}", serde_json::to_string_pretty(&signing::status(&app)?)?)
+                }
+                Signing::ConfigureProject => ios_release_native::project::configure(&app)?,
+            }
+        }
+        Commands::Release { action } => {
+            if cli.plan {
+                println!(
+                    "{}",
+                    json!({"operation":"release","steps":["QA","isolated signing installation","archive and validation","seal exact release identity"],"archive_configuration":app.configuration("archive")})
+                );
+                return Ok(0);
+            }
+            match action {
+                Release::Prepare {
+                    version,
+                    build_number,
+                    installed_signing,
+                } => {
+                    let number = if let Some(number) = build_number {
+                        number
+                    } else {
+                        store::next_number(&app, &mut Apple::new()?)?
+                    };
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&release::prepare(
+                            &mut app,
+                            &version,
+                            &number,
+                            &mut executor,
+                            !installed_signing
+                        )?)?
+                    );
+                }
+                Release::Seal {
+                    version,
+                    build_number,
+                    output,
+                } => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&release::seal(
+                            &app,
+                            &version,
+                            &build_number,
+                            &app.root.join(output)
+                        )?)?
+                    );
+                }
+                Release::NextBuildNumber => {
+                    println!("{}", store::next_number(&app, &mut Apple::new()?)?)
+                }
+                Release::Build {
+                    version,
+                    build_number,
+                    installed_signing,
+                } => release::build(
+                    &app,
+                    &version,
+                    &build_number,
+                    &mut executor,
+                    !installed_signing,
+                )?,
+                Release::VerifyArchive {
+                    version,
+                    build_number,
+                } => release::verify_archive(&app, &version, &build_number, &mut executor)?,
+                Release::Pack {
+                    release: directory,
+                    output,
+                } => release::pack(&app, &app.root.join(directory), &app.root.join(output))?,
+            }
+        }
+        Commands::Store {
+            action,
+            release: directory,
+        } => {
+            if cli.plan {
+                println!(
+                    "{}",
+                    json!({"operation":"store","release":directory,"apple_mutations":!matches!(action,Store::Status|Store::Validate|Store::BetaGroups{create:None,..}|Store::Wait{..}),"submission_requires_confirmation":matches!(action,Store::Submit{..}),"bundle_id":app.config["app_store"]["bundle_id"]})
+                );
+                return Ok(0);
+            }
+            if matches!(action, Store::Validate) {
+                let locales = metadata::preflight(&app)?
+                    .into_iter()
+                    .map(|(locale, _, _)| locale)
+                    .collect::<Vec<_>>();
+                println!(
+                    "{}",
+                    json!({"valid":true,"locales":locales,"apple_mutations":false})
+                );
+                return Ok(0);
+            }
+            let mut api = Apple::new()?;
+            if let Store::BetaGroups { create, external } = action {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&store::beta_groups(
+                        &mut app,
+                        &mut api,
+                        create.as_deref(),
+                        external
+                    )?)?
+                );
+                return Ok(0);
+            }
+            if matches!(action, Store::Status) {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&store::status(&app, &mut api)?)?
+                );
+                return Ok(0);
+            }
+            let mut release = store::Release::load(&app, &app.root.join(directory))?;
+            match action {
+                Store::Publish { confirm } => {
+                    store::publish(&app, &mut release, &mut api, confirm)?
+                }
+                Store::Phased { state } => store::phased(&app, &mut release, &mut api, &state)?,
+                Store::Upload => store::upload(&app, &mut release, &mut api)?,
+                Store::Wait { timeout } => {
+                    store::wait(&app, &mut release, &mut api, timeout)?;
+                }
+                Store::Testflight => store::testflight(&app, &mut release, &mut api)?,
+                Store::Stage => {
+                    store::stage(&app, &mut release, &mut api)?;
+                }
+                Store::Metadata => metadata::sync(&app, &mut release, &mut api)?,
+                Store::Submit { confirm } => store::submit(&app, &mut release, &mut api, confirm)?,
+                Store::Status | Store::Validate | Store::BetaGroups { .. } => unreachable!(),
+            }
+            println!("{}", serde_json::to_string_pretty(&release.receipt)?);
+        }
+        Commands::Status => {
+            if cli.plan {
+                println!("{}", json!({"operation":"status","apple_mutations":false}));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&store::status(&app, &mut Apple::new()?)?)?
+                );
+            }
+        }
         Commands::Doctor { .. }
         | Commands::Toolchain {
             compatibility: false,
@@ -256,12 +716,24 @@ fn run(cli: Cli) -> Result<i32> {
                 screenshots::run(&app, &options, &mut executor)?;
             }
         }
-        Commands::XcresultReport { .. } => unreachable!(),
+        Commands::XcresultReport { .. } | Commands::Init { .. } | Commands::Auth { .. } => {
+            unreachable!()
+        }
     }
     Ok(0)
 }
 
 fn run_qa(plan: bool, app: &App, check: &str, executor: &mut Native) -> Result<i32> {
+    if check == "all" {
+        let checks = app.qa_checks()?;
+        for name in checks {
+            let status = run_qa(plan, app, &name, executor)?;
+            if status != 0 {
+                return Ok(status);
+            }
+        }
+        return Ok(0);
+    }
     if plan {
         let workers = std::env::var("TEST_WORKERS").unwrap_or_else(|_| "1".into());
         let value = if ["lint", "localization"].contains(&check) {

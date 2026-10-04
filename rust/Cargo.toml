@@ -1,6 +1,6 @@
 [package]
 name = "ios-release-native"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.98"
 description = "Native Xcode automation with explicit simulator and release contracts"
@@ -23,6 +23,16 @@ sha2 = "0.10"
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+p256 = { version = "0.13", features = ["ecdsa", "pem"] }
+aes-gcm = "0.10"
+scrypt = "0.11"
+rand = "0.8"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+rpassword = "7"
+md-5 = "0.10"
+png = "0.18"
 
 [profile.release]
 lto = "thin"
