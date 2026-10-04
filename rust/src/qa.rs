@@ -60,7 +60,10 @@ pub fn command(
         );
         args.extend(["clean", "test"].map(String::from));
     }
-    Ok(Step::new("xcodebuild", args, 2400).developer(
+    // Hosted video/codec tests can keep making progress beyond forty minutes.
+    // Bound test execution at one hour, leaving diagnostic time in the 90-minute job.
+    let deadline = if name.starts_with("test") { 3600 } else { 2400 };
+    Ok(Step::new("xcodebuild", args, deadline).developer(
         app.xcode(name == "test-compatibility")?["path"]
             .as_str()
             .context("Missing Xcode path")?,

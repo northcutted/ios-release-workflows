@@ -50,7 +50,7 @@ jobs:
     name: Native app QA
     if: inputs.operation == 'check'
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -149,7 +149,7 @@ jobs:
     name: Test release inputs without signing or Apple credentials
     needs: signing
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - *checkout
       - *native

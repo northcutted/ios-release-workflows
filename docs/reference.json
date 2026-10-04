@@ -487,7 +487,7 @@
           "runner": "${{ inputs.runner }}",
           "uses": null,
           "environment": null,
-          "timeout_minutes": 60,
+          "timeout_minutes": 90,
           "permissions": {
             "contents": "read"
           },
@@ -532,7 +532,7 @@
           "runner": "${{ inputs.runner }}",
           "uses": null,
           "environment": null,
-          "timeout_minutes": 60,
+          "timeout_minutes": 90,
           "permissions": null,
           "secret_names": []
         },
@@ -1330,7 +1330,7 @@
           "runner": "${{ matrix.runner }}",
           "uses": null,
           "environment": null,
-          "timeout_minutes": 60,
+          "timeout_minutes": 90,
           "permissions": null,
           "secret_names": []
         },

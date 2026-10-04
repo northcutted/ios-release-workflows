@@ -145,6 +145,7 @@ fn explicit_targets_workspace_and_serial_execution_are_preserved() {
         "1",
     )
     .unwrap();
+    assert_eq!(command.timeout_seconds, 3600);
     let args = args(&command);
     assert_eq!(&args[..2], ["-workspace", "Other App.xcworkspace"]);
     assert!(args.contains(&"-only-testing:ExtensionTests".into()));

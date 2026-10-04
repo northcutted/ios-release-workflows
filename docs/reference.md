@@ -176,10 +176,10 @@ Named secrets: <code>IOS_RELEASE_API_ISSUER_ID</code>, <code>IOS_RELEASE_API_KEY
 
 | Job | Needs | Execution | Condition |
 | --- | --- | --- | --- |
-| <code>check</code><br>Native app QA | — | <code>${{ inputs.runner }}</code>; 60 min | <code>inputs.operation == 'check'</code> |
+| <code>check</code><br>Native app QA | — | <code>${{ inputs.runner }}</code>; 90 min | <code>inputs.operation == 'check'</code> |
 | <code>guard</code><br>Require protected release controls | — | <code>ubuntu-24.04</code>; 30 min | <code>inputs.operation != 'check'</code> |
 | <code>signing</code><br>Reconcile owned signing assets without compiling app code | <code>guard</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>native-signing-admin</code> | <code>inputs.operation == 'prepare'</code> |
-| <code>qa</code><br>Test release inputs without signing or Apple credentials | <code>signing</code> | <code>${{ inputs.runner }}</code>; 60 min | — |
+| <code>qa</code><br>Test release inputs without signing or Apple credentials | <code>signing</code> | <code>${{ inputs.runner }}</code>; 90 min | — |
 | <code>build</code><br>Build app with isolated signing assets | <code>signing</code> | <code>${{ inputs.runner }}</code>; 60 min<br>Environment: <code>native-signing</code> | — |
 | <code>verify</code><br>Verify signed IPA and matching symbols without build credentials | <code>build</code>, <code>qa</code>, <code>signing</code> | <code>${{ inputs.runner }}</code>; 30 min | — |
 | <code>seal</code><br>Seal and attest the verified release without compiling app code | <code>verify</code>, <code>qa</code>, <code>signing</code> | <code>ubuntu-24.04</code>; 30 min | — |
@@ -421,6 +421,6 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | Job | Needs | Execution | Condition |
 | --- | --- | --- | --- |
 | <code>contracts</code><br>Rust contracts (${{ matrix.runner }}) | — | <code>${{ matrix.runner }}</code>; 30 min | — |
-| <code>native-tests</code><br>PicStrip Rust ${{ matrix.check }} | — | <code>${{ matrix.runner }}</code>; 60 min | — |
+| <code>native-tests</code><br>PicStrip Rust ${{ matrix.check }} | — | <code>${{ matrix.runner }}</code>; 90 min | — |
 | <code>qa-evidence</code><br>PicStrip Rust QA evidence compatibility | <code>native-tests</code> | <code>ubuntu-24.04</code>; 30 min | — |
 | <code>screenshots</code><br>PicStrip Rust screenshots (${{ matrix.device }}) | — | <code>xcode-27</code>; 90 min | — |
