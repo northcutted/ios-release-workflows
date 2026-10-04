@@ -8,6 +8,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_native_retries_cannot_replace_exact_upstream_artifacts_with_names(self):
+        w = workflows(ROOT / ".github/workflows")
+        jobs = w["native-app.yml"]["jobs"]
+        jobs["signing"]["outputs"]["artifact"] = "latest"
+        download = next(s for s in jobs["qa"]["steps"] if s.get("uses", "").startswith("actions/download-artifact@"))
+        download["with"] = {"name": "native-signing"}
+        errors = "\n".join(validate(w))
+        self.assertIn("preserve attempts", errors)
+        self.assertIn("exact upstream artifact IDs", errors)
     def test_native_release_preserves_credential_and_approval_boundaries(self):
         w = workflows(ROOT / ".github/workflows")
         jobs = w["native-app.yml"]["jobs"]

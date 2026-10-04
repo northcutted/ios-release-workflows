@@ -70,7 +70,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: native-qa-${{ github.run_id }}
+          name: native-qa-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/qa-results/
           if-no-files-found: error
           retention-days: 14
@@ -111,6 +111,7 @@ jobs:
       cancel-in-progress: false
     outputs:
       number: ${{ steps.number.outputs.number }}
+      artifact: ${{ steps.signing_artifact.outputs.artifact-id }}
     steps:
       - *checkout
       - *native
@@ -138,9 +139,10 @@ jobs:
           IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
           IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
           IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - id: signing_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: native-signing-${{ github.run_id }}
+          name: native-signing-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/build/native-signing/signing.json
           if-no-files-found: error
           retention-days: 90
@@ -150,20 +152,24 @@ jobs:
     needs: signing
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
+    outputs:
+      artifact: ${{ steps.qa_artifact.outputs.artifact-id }}
     steps:
       - *checkout
       - *native
       - &download_signing
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: native-signing-${{ github.run_id }}
+          artifact-ids: ${{ needs.signing.outputs.artifact }}
+          merge-multiple: true
           path: ${{ inputs.app_root }}/build/native-signing
       - run: ios-release signing apply --input build/native-signing/signing.json
       - run: ios-release qa all
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - id: qa_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: native-release-qa-${{ github.run_id }}
+          name: native-release-qa-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/qa-results/
           if-no-files-found: error
           retention-days: 90
@@ -174,6 +180,8 @@ jobs:
     environment: native-signing
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
+    outputs:
+      artifact: ${{ steps.build_artifact.outputs.artifact-id }}
     steps:
       - *checkout
       - *native
@@ -185,9 +193,10 @@ jobs:
           IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - id: build_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: native-archive-${{ github.run_id }}
+          name: native-archive-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ inputs.app_root }}/build/application.ipa
             ${{ inputs.app_root }}/build/application.xcarchive/dSYMs/
@@ -199,6 +208,8 @@ jobs:
     needs: [build, qa, signing]
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
+    outputs:
+      artifact: ${{ steps.verify_artifact.outputs.artifact-id }}
     steps:
       - *checkout
       - *native
@@ -206,16 +217,18 @@ jobs:
       - run: ios-release signing apply --input build/native-signing/signing.json
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: native-archive-${{ github.run_id }}
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          merge-multiple: true
           path: ${{ inputs.app_root }}/build/
       - name: Verify exported bundles, entitlements, profiles and dSYMs
         run: ios-release release verify-archive --version "$VERSION" --build-number "$BUILD_NUMBER"
         env:
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - id: verify_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: native-archive-verified-${{ github.run_id }}
+          name: native-archive-verified-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ inputs.app_root }}/build/application.ipa
             ${{ inputs.app_root }}/build/rust-archive.json
@@ -239,11 +252,13 @@ jobs:
       - run: ios-release signing apply --input build/native-signing/signing.json
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: native-archive-verified-${{ github.run_id }}
+          artifact-ids: ${{ needs.verify.outputs.artifact }}
+          merge-multiple: true
           path: ${{ inputs.app_root }}/build/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: native-release-qa-${{ github.run_id }}
+          artifact-ids: ${{ needs.qa.outputs.artifact }}
+          merge-multiple: true
           path: ${{ inputs.app_root }}/qa-results/
       - name: Bind all successful QA to the verified binary and prepare its package
         run: |
@@ -257,7 +272,7 @@ jobs:
           subject-path: ${{ inputs.app_root }}/build/native-release.zip
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: native-release-${{ github.run_id }}
+          name: native-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/build/native-release.zip
           if-no-files-found: error
           retention-days: 90
@@ -265,6 +280,8 @@ jobs:
         run: printf 'Verified preparation **%s**. Choose TestFlight or Stage and use this run ID. App Review and public release require production approval.\n' "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
     env: *source_env
   select:
+    outputs:
+      preparation_attempt: ${{ steps.selection.outputs.preparation_attempt }}
     name: Authenticate the exact preparation before requesting Apple credentials
     if: contains(fromJSON('["testflight","stage","metadata","submit","publish","phase-pause","phase-resume","phase-complete"]'), inputs.operation)
     needs: guard
@@ -277,7 +294,8 @@ jobs:
       - *checkout
       - *native
       - name: Authenticate selected source, attestation and exact IPA
-        run: ios-release github fetch --run "$RELEASE_RUN"
+        id: selection
+        run: ios-release github fetch --run "$RELEASE_RUN" --github-output
         env:
           RELEASE_RUN: ${{ inputs.release_run }}
           GH_TOKEN: ${{ github.token }}
@@ -365,7 +383,7 @@ jobs:
           subject-path: receipt/operation.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: native-receipt-${{ inputs.release_run }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: native-receipt-${{ inputs.release_run }}-${{ needs.select.outputs.preparation_attempt }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: receipt/operation.json
           if-no-files-found: error
           retention-days: 90

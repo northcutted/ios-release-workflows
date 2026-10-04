@@ -5,7 +5,7 @@ use ios_release_native::{
     results, screenshots, signing, store, toolchain,
 };
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
@@ -255,6 +255,8 @@ enum Github {
         run: u64,
         #[arg(long, default_value = "build/native-release")]
         output: PathBuf,
+        #[arg(long)]
+        github_output: bool,
     },
     Setup {
         #[arg(long)]
@@ -396,19 +398,28 @@ fn run(cli: Cli) -> Result<i32> {
                     ios_release_native::github::controls(&app, &runner, &mut executor)?;
                 }
             }
-            Github::Fetch { run, output } => {
+            Github::Fetch {
+                run,
+                output,
+                github_output,
+            } => {
                 if cli.plan {
                     println!(
                         "{}",
                         json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, attestation, manifest and receipt identity"})
                     );
                 } else {
-                    ios_release_native::github::fetch(
+                    let manifest = ios_release_native::github::fetch(
                         &app,
                         run,
                         &app.root.join(output),
                         &mut executor,
                     )?;
+                    if github_output {
+                        let path = std::env::var("GITHUB_OUTPUT")
+                            .context("--github-output requires GITHUB_OUTPUT")?;
+                        ios_release_native::github::selection_output(&manifest, Path::new(&path))?;
+                    }
                 }
             }
             Github::Setup { reviewer } => {

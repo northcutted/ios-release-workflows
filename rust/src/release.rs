@@ -88,6 +88,7 @@ pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<
         .unwrap_or_else(|_| "local".into());
     let manifest = json!({"schema_version":2,"verified":true,"source_sha":source,"run_id":archive["run_id"],"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"bundle_id":app.config["app_store"]["bundle_id"],"team_id":app.config["team_id"],"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&staged.join("application.ipa"))?,"config_sha256":fsutil::sha256(&staged.join("app.json"))?,"qa_sha256":fsutil::sha256(&staged.join("qa.json"))?,"archive_sha256":fsutil::sha256(&staged.join("archive.json"))?});
     let mut manifest = manifest;
+    manifest["run_attempt"] = json!(std::env::var("GITHUB_RUN_ATTEMPT").ok());
     manifest["repository"] = json!(
         std::env::var("GITHUB_REPOSITORY")
             .ok()

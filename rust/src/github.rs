@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
+use std::io::Write;
 use std::{fs, path::Path};
 
 pub fn repository(app: &App) -> Result<&str> {
@@ -306,7 +307,8 @@ pub fn validate_run<'a>(value: &'a Value, repo: &str, run: u64) -> Result<&'a st
     ensure!(
         value["conclusion"] == "success"
             && value["head_branch"] == "main"
-            && value["event"] == "workflow_dispatch",
+            && value["event"] == "workflow_dispatch"
+            && value["run_attempt"].as_u64().is_some_and(|n| n > 0),
         "Select a successful preparation from main"
     );
     let sha = value["head_sha"]
@@ -324,6 +326,7 @@ fn verify_attestation(
     file: &Path,
     source: &str,
     run: u64,
+    attempt: u64,
     executor: &mut impl Executor,
 ) -> Result<()> {
     let repo = repository(app)?;
@@ -355,11 +358,11 @@ fn verify_attestation(
         &app.root,
     )?;
     let result: Value = serde_json::from_str(&raw)?;
-    validate_invocation(&result, repo, run)
+    validate_invocation(&result, repo, run, attempt)
 }
-pub fn validate_invocation(result: &Value, repo: &str, run: u64) -> Result<()> {
-    let prefix =
-        format!("https://github.com/{repo}/actions/runs/{run}/attempts/").to_ascii_lowercase();
+pub fn validate_invocation(result: &Value, repo: &str, run: u64, attempt: u64) -> Result<()> {
+    ensure!(run > 0 && attempt > 0, "A run and attempt are required");
+    let expected = format!("https://github.com/{repo}/actions/runs/{run}/attempts/{attempt}");
     ensure!(
         result
             .as_array()
@@ -370,12 +373,7 @@ pub fn validate_invocation(result: &Value, repo: &str, run: u64) -> Result<()> {
                 proof["signature"]["certificate"]["runInvocationURI"]
                     .as_str()
                     .is_some_and(|id| {
-                        id.to_ascii_lowercase()
-                        .strip_prefix(&prefix)
-                        .is_some_and(|attempt| {
-                            attempt.parse::<u64>().is_ok_and(|n| n > 0)
-                                && attempt.bytes().all(|c| c.is_ascii_digit())
-                        })
+                        id.eq_ignore_ascii_case(&expected)
                         && proof["statement"]["predicate"]["runDetails"]["metadata"]
                             ["invocationId"]
                             .as_str()
@@ -452,10 +450,16 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
     ensure!(run > 0, "Select a preparation run ID");
     let selected = selected_run(app, run, executor)?;
     let source = selected["head_sha"].as_str().unwrap();
-    let temp = download(app, run, &format!("native-release-{run}"), executor)?;
+    let attempt = selected["run_attempt"].as_u64().unwrap();
+    let temp = download(
+        app,
+        run,
+        &format!("native-release-{run}-{attempt}"),
+        executor,
+    )?;
     let package = temp.path().join("native-release.zip");
     ensure!(package.is_file(), "Preparation package missing");
-    verify_attestation(app, &package, source, run, executor)?;
+    verify_attestation(app, &package, source, run, attempt, executor)?;
     fsutil::confined(&app.root, output)?;
     ensure!(
         !output.exists(),
@@ -493,25 +497,40 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
                 .as_str()
                 .and_then(|s| s.parse::<u64>().ok())
                 == Some(run)
+            && release.manifest["run_attempt"]
+                .as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                == Some(attempt)
             && release.manifest["repository"] == repository(app)?
             && release.manifest["platform_revision"] == env!("IOS_RELEASE_BUILD_REVISION"),
         "Preparation manifest identity differs from authenticated producer"
     );
-    restore_receipt(app, run, &mut release, executor)?;
+    restore_receipt(app, run, attempt, &mut release, executor)?;
     let manifest = release.manifest.clone();
     drop(release);
     fs::rename(stage.path(), output)?;
     println!("Authenticated preparation {run} at {}", output.display());
     Ok(manifest)
 }
+pub fn selection_output(manifest: &Value, path: &Path) -> Result<()> {
+    let attempt = manifest["run_attempt"]
+        .as_str()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|n| *n > 0)
+        .context("Verified preparation attempt missing")?;
+    let mut output = fs::OpenOptions::new().append(true).open(path)?;
+    writeln!(output, "preparation_attempt={attempt}")?;
+    Ok(())
+}
 fn restore_receipt(
     app: &App,
     prepared_run: u64,
+    prepared_attempt: u64,
     release: &mut crate::store::Release,
     executor: &mut impl Executor,
 ) -> Result<()> {
     let repo = repository(app)?;
-    let prefix = format!("native-receipt-{prepared_run}-");
+    let prefix = format!("native-receipt-{prepared_run}-{prepared_attempt}-");
     let mut found = vec![];
     for page in 1..=100 {
         let response = request(
@@ -565,9 +584,20 @@ fn restore_receipt(
         .context("Receipt source missing")?;
     let name = artifact["name"].as_str().unwrap();
     crate::config::filename(name)?;
+    let suffix = name.strip_prefix(&prefix).unwrap();
+    let (named_run, named_attempt) = suffix.split_once('-').context("Receipt attempt missing")?;
+    ensure!(
+        named_run.parse::<u64>().ok() == Some(run),
+        "Receipt name belongs to another operation run"
+    );
+    let attempt = named_attempt
+        .parse::<u64>()
+        .ok()
+        .filter(|n| *n > 0)
+        .context("Receipt attempt invalid")?;
     let temp = download(app, run, name, executor)?;
     let file = temp.path().join("operation.json");
-    verify_attestation(app, &file, source, run, executor)?;
+    verify_attestation(app, &file, source, run, attempt, executor)?;
     let value: Value = serde_json::from_slice(&fs::read(&file)?)?;
     ensure!(
         value["identity"] == release.receipt["identity"],

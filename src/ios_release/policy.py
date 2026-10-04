@@ -76,6 +76,16 @@ def validate(items):
         build = native["build"]
         check(build.get("environment") == "native-signing" and "IOS_RELEASE_API_KEY" not in json.dumps(build) and not (build.get("permissions") or {}).get("id-token"), "Native build must receive signing assets without Apple API or provenance credentials")
         check(build.get("needs") == "signing" and native["qa"].get("needs") == "signing", "Native archive and QA must use the same signing input snapshot in parallel")
+        for name in ["signing", "qa", "build", "verify"]:
+            uploads = [s for s in native[name]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
+            check(len(uploads) == 1 and "${{ github.run_attempt }}" in uploads[0].get("with", {}).get("name", "")
+                  and native[name].get("outputs", {}).get("artifact") == "${{ steps." + uploads[0].get("id", "") + ".outputs.artifact-id }}",
+                  "native-app/" + name + ": retry artifacts must preserve attempts and export their exact ID")
+        for name, producers in [("qa", ["signing"]), ("build", ["signing"]), ("verify", ["signing", "build"]), ("seal", ["signing", "verify", "qa"])]:
+            downloads = [s.get("with", {}) for s in native[name]["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
+            check([s.get("artifact-ids") for s in downloads] == ["${{ needs." + p + ".outputs.artifact }}" for p in producers]
+                  and all(s.get("merge-multiple") is True and "name" not in s for s in downloads),
+                  "native-app/" + name + ": retries must consume exact upstream artifact IDs")
         for name in ["seal", "receipt"]:
             job = native[name]
             body = json.dumps(job)

@@ -59,7 +59,7 @@ fn signing_transfer_rejects_wrong_source_paths_hashes_and_partial_updates() {
 #[test]
 fn authenticated_run_and_invocation_must_match_the_selected_preparation() {
     use ios_release_native::github::{validate_invocation, validate_run};
-    let value = json!({"id":42,"repository":{"full_name":"Owner/App"},"conclusion":"success","head_branch":"main","event":"workflow_dispatch","head_sha":"a".repeat(40)});
+    let value = json!({"id":42,"run_attempt":1,"repository":{"full_name":"Owner/App"},"conclusion":"success","head_branch":"main","event":"workflow_dispatch","head_sha":"a".repeat(40)});
     assert_eq!(
         validate_run(&value, "owner/app", 42).unwrap(),
         "a".repeat(40)
@@ -77,16 +77,34 @@ fn authenticated_run_and_invocation_must_match_the_selected_preparation() {
         assert!(validate_run(&wrong, "owner/app", 42).is_err());
     }
     let proof = json!([{"verificationResult":{"signature":{"certificate":{"runInvocationURI":"https://github.com/Owner/App/actions/runs/42/attempts/1"}},"statement":{"predicate":{"runDetails":{"metadata":{"invocationId":"https://github.com/Owner/App/actions/runs/42/attempts/1"}}}}}}]);
-    assert!(validate_invocation(&proof, "owner/app", 42).is_ok());
-    assert!(validate_invocation(&proof, "owner/app", 43).is_err());
-    assert!(validate_invocation(&proof, "owner/other", 42).is_err());
-    assert!(validate_invocation(&json!([]), "owner/app", 42).is_err());
+    assert!(validate_invocation(&proof, "owner/app", 42, 1).is_ok());
+    assert!(validate_invocation(&proof, "owner/app", 42, 2).is_err());
+    assert!(validate_invocation(&proof, "owner/app", 42, 0).is_err());
+    assert!(validate_invocation(&proof, "owner/app", 43, 1).is_err());
+    assert!(validate_invocation(&proof, "owner/other", 42, 1).is_err());
+    assert!(validate_invocation(&json!([]), "owner/app", 42, 1).is_err());
     let mut forged = proof.clone();
     forged[0]["verificationResult"]["signature"]["certificate"]["runInvocationURI"] =
         json!("https://github.com/Owner/App/actions/runs/43/attempts/1");
-    assert!(validate_invocation(&forged, "owner/app", 42).is_err());
+    assert!(validate_invocation(&forged, "owner/app", 42, 1).is_err());
     forged[0]["verificationResult"]["signature"] = json!({});
-    assert!(validate_invocation(&forged, "owner/app", 42).is_err());
+    assert!(validate_invocation(&forged, "owner/app", 42, 1).is_err());
+}
+#[test]
+fn selected_preparation_attempt_is_exported_without_accepting_output_injection() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("github-output");
+    fs::write(&path, "existing=value\n").unwrap();
+    ios_release_native::github::selection_output(&json!({"run_attempt":"2"}), &path).unwrap();
+    let before = fs::read(&path).unwrap();
+    assert_eq!(before, b"existing=value\npreparation_attempt=2\n");
+    for invalid in [json!(null), json!("0"), json!("2\nother=secret")] {
+        assert!(
+            ios_release_native::github::selection_output(&json!({"run_attempt":invalid}), &path)
+                .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
 }
 fn local_metadata(app: &App, locale: &str) {
     let folder = app.path("metadata_path").unwrap().join(locale);

@@ -151,6 +151,11 @@ and exact IPA before Apple credentials become available, then verifies them agai
 inside the selected protected job. Recovery receipts are separately attested and
 restored automatically, including receipts from interrupted operations.
 
+Each preparation attempt retains separate artifacts. A failed-job rerun reuses
+successful upstream artifacts by their exact IDs; selection verifies the successful
+attempt's signed run identity. Once a preparation has been delivered, keep that
+run unchanged and dispatch a new Prepare for the next build.
+
 Native release artifacts and recovery receipts are retained for 90 days. Download
 and preserve a release directory for longer-term local management before expiry.
 Do not delete successful preparation runs while their releases are being managed.
