@@ -7,6 +7,7 @@
     "src/ios_release/cli.py",
     ".github/workflows/ci.yml",
     ".github/workflows/deploy.yml",
+    ".github/workflows/native-adoption.yml",
     ".github/workflows/observe.yml",
     ".github/workflows/platform-tests.yml",
     ".github/workflows/prepare.yml",
@@ -360,6 +361,52 @@
             "artifact-metadata": "write",
             "actions": "read"
           },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/native-adoption.yml",
+      "name": "Native app adoption rehearsal",
+      "triggers": {
+        "pull_request": {},
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_dispatch": {}
+      },
+      "inputs": {},
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "onboarding",
+          "name": "New app onboarding and simulator QA",
+          "needs": [],
+          "condition": null,
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 60,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "screenshots",
+          "name": "New app screenshots (${{ matrix.device }})",
+          "needs": [],
+          "condition": null,
+          "runner": "xcode-27",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 60,
+          "permissions": null,
           "secret_names": []
         }
       ]

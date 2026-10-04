@@ -682,7 +682,7 @@ fn public_diagnostics_work_without_app_configuration() {
     let contract: Value = serde_json::from_slice(&contract.stdout).unwrap();
     assert_eq!(contract["schema_version"], 1);
     assert!(contract["commands"]["qa"]["description"].is_string());
-    assert_eq!(contract["apple_store_mutations"], false);
+    assert_eq!(contract["apple_store_mutations"], true);
     assert!(execute(&["doctor"]).status.success());
     assert!(execute(&["qa", "--help"]).status.success());
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);

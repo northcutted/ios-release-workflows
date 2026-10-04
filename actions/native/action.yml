@@ -1,0 +1,22 @@
+name: Native iOS release CLI
+description: Build the standalone CLI from this action's immutable platform source
+inputs:
+  revision:
+    description: Full platform commit used by the caller
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Compile the pinned CLI without app dependencies
+      shell: bash
+      run: |
+        root="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        actual="$(git -C "$root" rev-parse HEAD)"
+        test "$actual" = "$PLATFORM_REVISION"
+        test "${#PLATFORM_REVISION}" = 40
+        rustup toolchain install 1.98.1 --profile minimal
+        cargo build --manifest-path "$root/rust/Cargo.toml" --locked --release
+        echo "$root/rust/target/release" >> "$GITHUB_PATH"
+        echo "IOS_RELEASE_NATIVE_ROOT=$root" >> "$GITHUB_ENV"
+      env:
+        PLATFORM_REVISION: ${{ inputs.revision }}

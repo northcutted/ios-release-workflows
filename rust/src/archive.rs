@@ -44,7 +44,15 @@ pub fn options(app: &App) -> Result<plist::Value> {
 }
 
 pub fn steps(app: &App, version: &str, number: &str) -> Result<Vec<Step>> {
-    validate_numbers(version, number)?;
+    if app.config["schema_version"] == 2 {
+        ensure!(
+            Regex::new(r"^\d+\.\d+\.\d+$")?.is_match(version)
+                && Regex::new(r"^[0-9]{1,18}(\.[0-9]{1,18}){0,2}$")?.is_match(number),
+            "Invalid Apple version/build number"
+        );
+    } else {
+        validate_numbers(version, number)?;
+    }
     let (kind, project) = app.project()?;
     let developer = app.xcode(false)?["path"]
         .as_str()
@@ -57,7 +65,7 @@ pub fn steps(app: &App, version: &str, number: &str) -> Result<Vec<Step>> {
             "-scheme".into(),
             app.text("scheme")?.into(),
             "-configuration".into(),
-            "Release".into(),
+            app.configuration("archive").into(),
             "-destination".into(),
             "generic/platform=iOS".into(),
             "-archivePath".into(),
@@ -88,6 +96,8 @@ pub fn steps(app: &App, version: &str, number: &str) -> Result<Vec<Step>> {
 }
 
 pub fn run(app: &App, version: &str, number: &str, executor: &mut impl Executor) -> Result<()> {
+    let inputs_sha256 = crate::source::fingerprint(&app.root)?;
+    app.require_archive()?;
     let steps = steps(app, version, number)?;
     toolchain::resolve(app, false, &[], executor)?;
     let export = app.root.join("build/rust-export");
@@ -140,7 +150,7 @@ pub fn run(app: &App, version: &str, number: &str, executor: &mut impl Executor)
     let inventory = verify(app, &ipa, version, number, executor)?;
     fsutil::json(
         &report,
-        &json!({"schema_version":1,"implementation":"rust","local_archive":true,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"release_candidate":false}),
+        &json!({"schema_version":1,"implementation":"rust","local_archive":true,"inputs_sha256":inputs_sha256,"run_id":std::env::var("GITHUB_RUN_ID").ok(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"release_candidate":false}),
     )?;
     Ok(())
 }

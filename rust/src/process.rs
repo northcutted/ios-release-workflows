@@ -133,9 +133,16 @@ impl Executor for Native {
                     command.arg(value);
                 }
                 Arg::Secret { secret_env } => {
-                    command.arg(std::env::var(secret_env).with_context(|| {
-                        format!("Missing secret environment variable {secret_env}")
-                    })?);
+                    command.arg(
+                        step.env
+                            .get(secret_env)
+                            .cloned()
+                            .map(Ok)
+                            .unwrap_or_else(|| std::env::var(secret_env))
+                            .with_context(|| {
+                                format!("Missing secret environment variable {secret_env}")
+                            })?,
+                    );
                 }
             }
         }

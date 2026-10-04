@@ -45,6 +45,7 @@ Platform: northcutted/ios-release-workflows.
 | --- | --- | --- |
 | [iOS CI](#ios-ci) | [ci.yml](../.github/workflows/ci.yml) | <code>workflow_call</code> |
 | [Deploy verified release](#deploy-verified-release) | [deploy.yml](../.github/workflows/deploy.yml) | <code>workflow_call</code> |
+| [Native app adoption rehearsal](#native-app-adoption-rehearsal) | [native-adoption.yml](../.github/workflows/native-adoption.yml) | <code>pull_request</code>, <code>push</code>, <code>workflow_dispatch</code> |
 | [Observe App Store releases](#observe-app-store-releases) | [observe.yml](../.github/workflows/observe.yml) | <code>workflow_call</code> |
 | [Platform checks](#platform-checks) | [platform-tests.yml](../.github/workflows/platform-tests.yml) | <code>push</code>, <code>pull_request</code>, <code>workflow_dispatch</code> |
 | [Prepare verified candidate](#prepare-verified-candidate) | [prepare.yml](../.github/workflows/prepare.yml) | <code>workflow_call</code> |
@@ -115,6 +116,31 @@ Named secrets: <code>APP_STORE_CONNECT_API_KEY_CONTENT</code>, <code>APP_STORE_C
 | <code>stage</code> | <code>verify</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>app-store-staging</code> | — |
 | <code>review</code> | <code>stage</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>production</code> | <code>inputs.submit</code> |
 | <code>receipt</code> | <code>review</code> | <code>ubuntu-24.04</code>; 30 min | — |
+
+### Native app adoption rehearsal
+
+[Source](../.github/workflows/native-adoption.yml) · [Actions](https://github.com/northcutted/ios-release-workflows/actions/workflows/native-adoption.yml)
+
+Triggers (cron expressions use UTC):
+
+```json
+{
+  "pull_request": {},
+  "push": {
+    "branches": [
+      "main"
+    ]
+  },
+  "workflow_dispatch": {}
+}
+```
+
+Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"read"}</code>.
+
+| Job | Needs | Execution | Condition |
+| --- | --- | --- | --- |
+| <code>onboarding</code><br>New app onboarding and simulator QA | — | <code>xcode-27</code>; 60 min | — |
+| <code>screenshots</code><br>New app screenshots (${{ matrix.device }}) | — | <code>xcode-27</code>; 60 min | — |
 
 ### Observe App Store releases
 

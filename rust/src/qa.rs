@@ -26,7 +26,7 @@ pub fn command(
         "-scheme".into(),
         app.text("scheme")?.into(),
         "-configuration".into(),
-        "Debug".into(),
+        app.configuration("test").into(),
         "-destination".into(),
         destination.into(),
         "CODE_SIGNING_ALLOWED=NO".into(),
@@ -34,6 +34,10 @@ pub fn command(
     if name == "analyze" {
         args.extend(["-sdk", "iphonesimulator", "analyze"].map(String::from));
     } else {
+        ensure!(
+            !app.names("test_targets")?.is_empty(),
+            "Add a unit test target to the shared scheme, then rerun init; release QA must execute app tests"
+        );
         args.extend(
             [
                 "-parallel-testing-enabled",
@@ -64,6 +68,7 @@ pub fn command(
 }
 
 pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
+    let inputs_sha256 = crate::source::fingerprint(&app.root)?;
     ensure!(
         [
             "lint",
@@ -200,7 +205,7 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
     }
     fsutil::json(
         &directory.join("result.json"),
-        &json!({"check":name,"status":status,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()}),
+        &json!({"check":name,"status":status,"inputs_sha256":inputs_sha256,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()}),
     )?;
     Ok(status)
 }
