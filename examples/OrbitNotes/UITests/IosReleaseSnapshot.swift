@@ -10,11 +10,16 @@ enum IosReleaseSnapshot {
         }
     }
     static func launch(_ app: XCUIApplication) {
-        if let cache, let language = try? String(contentsOf: cache.appendingPathComponent("language.txt"), encoding: .utf8) {
+        if let language {
             app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         }
         app.launch()
     }
+    static var language: String? {
+        guard let cache else { return nil }
+        return try? String(contentsOf: cache.appendingPathComponent("language.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    static var title: String { language?.hasPrefix("ar") == true ? "ملاحظات أوربت" : "Orbit Notes" }
     static func capture(_ name: String, app: XCUIApplication) throws {
         guard let cache, let device = ProcessInfo.processInfo.environment["IOS_RELEASE_SNAPSHOT_DEVICE"] else { return }
         let folder = cache.appendingPathComponent("screenshots")

@@ -1,6 +1,8 @@
 name: OrbitNotes
 options:
   bundleIdPrefix: dev.iosrelease.fixture
+  knownRegions: [en, ar]
+  developmentLanguage: en
   deploymentTarget:
     iOS: '18.0'
 configs:

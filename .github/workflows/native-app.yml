@@ -20,6 +20,9 @@ on:
       platform_revision:
         type: string
         required: true
+      cli_version:
+        type: string
+        default: ''
       release_run:
         type: string
         default: ''
@@ -59,6 +62,7 @@ jobs:
         uses: $/actions/native
         with:
           revision: ${{ inputs.platform_revision }}
+          version: ${{ inputs.cli_version }}
       - name: Discover an unconfigured example app
         if: inputs.auto_init
         run: ios-release init --no-workflows

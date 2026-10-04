@@ -19,7 +19,7 @@ pub fn repository(app: &App) -> Result<&str> {
     );
     Ok(repo)
 }
-pub fn controls(app: &App, runner: &str, executor: &mut impl Executor) -> Result<()> {
+pub fn validate_runner(runner: &str) -> Result<()> {
     ensure!(
         [
             "xcode-27",
@@ -31,6 +31,10 @@ pub fn controls(app: &App, runner: &str, executor: &mut impl Executor) -> Result
         .contains(&runner),
         "Choose a supported hosted macOS runner"
     );
+    Ok(())
+}
+pub fn controls(app: &App, runner: &str, executor: &mut impl Executor) -> Result<()> {
+    validate_runner(runner)?;
     ensure!(
         std::env::var("GITHUB_EVENT_NAME").as_deref() == Ok("workflow_dispatch")
             && std::env::var("GITHUB_REF").as_deref() == Ok("refs/heads/main"),
@@ -168,6 +172,11 @@ pub fn setup(app: &App, reviewer: Option<&str>, executor: &mut impl Executor) ->
         password.len() >= 16,
         "Signing password must contain at least 16 characters"
     );
+    signing::validate_vault(
+        app,
+        &crate::vault::read(&signing::path(app)?, &password)
+            .context("Cannot unlock the signing vault; GitHub secrets were not changed")?,
+    )?;
     // API secrets and signing keys have distinct scopes. Production always has an explicit owner gate.
     for environment in [
         "native-signing-admin",

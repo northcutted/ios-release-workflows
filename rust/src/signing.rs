@@ -98,6 +98,7 @@ fn bind_certificate(
     temp: &Path,
     key: &Path,
     cert: &Value,
+    team: &str,
 ) -> Result<()> {
     let content = STANDARD.decode(
         cert["attributes"]["certificateContent"]
@@ -109,6 +110,35 @@ fn bind_certificate(
     ensure!(
         pem_public(executor, root, key)?.trim() == certificate_public(executor, root, &der)?.trim(),
         "Apple certificate does not match the owned private key"
+    );
+    let subject = checked(
+        executor,
+        &Step::new(
+            "openssl",
+            [
+                "x509",
+                "-inform",
+                "DER",
+                "-in",
+                der.to_str().unwrap(),
+                "-subject",
+                "-nameopt",
+                "RFC2253",
+                "-noout",
+            ],
+            30,
+        ),
+        root,
+    )?;
+    let subject = subject
+        .trim()
+        .strip_prefix("subject=")
+        .unwrap_or(subject.trim())
+        .trim();
+    let ou = regex::Regex::new(r"(?:^|,)OU=([A-Za-z0-9]+)(?:,|$)")?;
+    ensure!(
+        ou.captures(subject).is_some_and(|m| &m[1] == team),
+        "Distribution certificate belongs to another Apple team; check team_id and API credentials before continuing"
     );
     Ok(())
 }
@@ -225,7 +255,14 @@ pub fn sync_with_password(
         ),
         "Apple certificate is expired or has no expiration"
     );
-    bind_certificate(executor, &app.root, temp.path(), &key, &certificate)?;
+    bind_certificate(
+        executor,
+        &app.root,
+        temp.path(),
+        &key,
+        &certificate,
+        app.text("team_id")?,
+    )?;
     let certificate_id = api::id(&certificate)?.to_owned();
     state["certificate"] = certificate.clone();
     vault::write(&vault_path, &state, password)?;
@@ -644,6 +681,7 @@ impl Installed {
             owned.directory.path(),
             &private,
             &state["certificate"],
+            app.text("team_id")?,
         )?;
         fsutil::atomic(
             &der,

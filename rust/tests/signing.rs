@@ -177,6 +177,7 @@ impl Api for SigningServer {
         query: &[(String, String)],
         body: Option<&Value>,
     ) -> Result<Value> {
+        support::validate(method, path, query, body)?;
         let route = format!("{method} {path}");
         *self.counts.entry(route.clone()).or_default() += 1;
         let value = match (method, path) {
@@ -283,6 +284,17 @@ fn missing_or_expiring_profiles_renew_without_revoking_certificates() {
     }
 }
 #[test]
+fn expiring_owned_certificate_gets_a_new_profile_without_revocation() {
+    let (_root, mut app) = app();
+    let mut server = SigningServer::new(&app);
+    signing::sync_with_password(&mut app, &mut server, &mut Native, PASSWORD).unwrap();
+    server.certificates[0]["attributes"]["expirationDate"] = json!(future(29));
+    signing::sync_with_password(&mut app, &mut server, &mut Native, PASSWORD).unwrap();
+    assert_eq!(server.count("POST /v1/certificates"), 2);
+    assert_eq!(server.count("POST /v1/profiles"), 2);
+    assert_eq!(server.count("DELETE /v1/certificates/cert-1"), 0);
+}
+#[test]
 fn profile_contents_reject_wrong_team_bundle_certificate_and_debugging() {
     let (_root, app) = app();
     let profile = json!({"attributes":{"uuid":"UUID","name":"Profile"}});
@@ -364,3 +376,4 @@ fn profile_contents_reject_wrong_team_bundle_certificate_and_debugging() {
         );
     }
 }
+mod support;

@@ -1,4 +1,9 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=IOS_RELEASE_DISTRIBUTION_VERSION");
+    println!(
+        "cargo:rustc-env=IOS_RELEASE_DISTRIBUTION_VERSION={}",
+        std::env::var("IOS_RELEASE_DISTRIBUTION_VERSION").unwrap_or_default()
+    );
     println!("cargo:rerun-if-env-changed=IOS_RELEASE_BUILD_REVISION");
     for name in ["HEAD", "refs/heads"] {
         if let Ok(output) = std::process::Command::new("git")

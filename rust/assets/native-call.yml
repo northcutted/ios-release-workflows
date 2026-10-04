@@ -31,6 +31,9 @@ jobs:
       release_run: ${{ inputs.release_run }}
       version: ${{ inputs.version }}
       platform_revision: __PLATFORM_REVISION__
+      app_root: __APP_ROOT__
+      runner: __RUNNER__
+      cli_version: __CLI_VERSION__
     secrets:
       IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
       IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}

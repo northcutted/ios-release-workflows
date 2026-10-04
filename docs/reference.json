@@ -449,6 +449,10 @@
           "type": "string",
           "required": true
         },
+        "cli_version": {
+          "type": "string",
+          "default": ""
+        },
         "release_run": {
           "type": "string",
           "default": ""
@@ -677,7 +681,13 @@
       "triggers": {
         "workflow_dispatch": {}
       },
-      "inputs": {},
+      "inputs": {
+        "version": {
+          "description": "Native CLI package version",
+          "type": "string",
+          "default": "0.2.0-beta.1"
+        }
+      },
       "secret_names": [],
       "outputs": {},
       "permissions": {

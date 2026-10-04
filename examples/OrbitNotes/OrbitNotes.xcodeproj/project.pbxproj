@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		03EF50A6AC75D07B654A394C /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B009C2D52053CE3D857E7C51 /* ShareViewController.swift */; };
 		0440D70A960A89D378BC4BE1 /* OrbitNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EDA09B2E4806BF733CE795 /* OrbitNotesApp.swift */; };
+		1F2069AA75C1A794EF977729 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1E5DD52C2694EC6F709F836C /* Localizable.xcstrings */; };
 		3B738C64AA58CE2C5D823E65 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E96191579A0CF645866809DE /* PrivacyInfo.xcprivacy */; };
 		7A748AB8924BE4E597DA64A1 /* IosReleaseSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A344527C9F5A2A308EC2CF /* IosReleaseSnapshot.swift */; };
 		91D107F40FA8191DF394DC7E /* NotesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2EEDECBB77EFFCB56B30C02 /* NotesTests.swift */; };
@@ -57,6 +58,7 @@
 
 /* Begin PBXFileReference section */
 		00A344527C9F5A2A308EC2CF /* IosReleaseSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosReleaseSnapshot.swift; sourceTree = "<group>"; };
+		1E5DD52C2694EC6F709F836C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		2F9455E7F506E238625A20FC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3026D7ED15A6CD7FC2188C15 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4646A89004AF4FB15C72B0A4 /* OrbitNotes.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = OrbitNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -114,6 +116,7 @@
 		7CD13CE1889458BBCF0D105A /* App */ = {
 			isa = PBXGroup;
 			children = (
+				1E5DD52C2694EC6F709F836C /* Localizable.xcstrings */,
 				62EDA09B2E4806BF733CE795 /* OrbitNotesApp.swift */,
 				E96191579A0CF645866809DE /* PrivacyInfo.xcprivacy */,
 			);
@@ -235,6 +238,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
+				ar,
 				en,
 			);
 			mainGroup = 3AAD5410B730485BD375C0AA;
@@ -265,6 +269,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F2069AA75C1A794EF977729 /* Localizable.xcstrings in Resources */,
 				3B738C64AA58CE2C5D823E65 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

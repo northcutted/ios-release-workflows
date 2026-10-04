@@ -4,10 +4,13 @@ inputs:
   revision:
     description: Full platform commit used by the caller
     required: true
+  version:
+    description: Published native CLI version built from this exact source; empty compiles source
+    default: ''
 runs:
   using: composite
   steps:
-    - name: Compile the pinned CLI without app dependencies
+    - name: Install the verified standalone CLI or compile pinned development source
       shell: bash
       run: |
         root="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
@@ -15,9 +18,17 @@ runs:
         if test -e "$root/.git"; then actual="$(git -C "$root" rev-parse HEAD)"; fi
         test "$actual" = "$PLATFORM_REVISION"
         test "${#PLATFORM_REVISION}" = 40
-        rustup toolchain install 1.98.1 --profile minimal
-        IOS_RELEASE_BUILD_REVISION="$PLATFORM_REVISION" cargo build --manifest-path "$root/rust/Cargo.toml" --locked --release
-        echo "$root/rust/target/release" >> "$GITHUB_PATH"
+        if test -n "$CLI_VERSION"; then
+          prefix="$RUNNER_TEMP/ios-release-native-$PLATFORM_REVISION"
+          bash "$root/scripts/install-native.sh" "$CLI_VERSION" "$prefix" "$PLATFORM_REVISION"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+        else
+          rustup toolchain install 1.98.1 --profile minimal
+          IOS_RELEASE_BUILD_REVISION="$PLATFORM_REVISION" cargo build --manifest-path "$root/rust/Cargo.toml" --locked --release
+          echo "$root/rust/target/release" >> "$GITHUB_PATH"
+        fi
         echo "IOS_RELEASE_NATIVE_ROOT=$root" >> "$GITHUB_ENV"
       env:
         PLATFORM_REVISION: ${{ inputs.revision }}
+        CLI_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ github.token }}

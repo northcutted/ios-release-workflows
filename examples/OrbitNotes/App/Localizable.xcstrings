@@ -1,0 +1,10 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Orbit Notes": { "localizations": { "ar": { "stringUnit": { "state": "translated", "value": "ملاحظات أوربت" } } } },
+    "Plan a little adventure": { "localizations": { "ar": { "stringUnit": { "state": "translated", "value": "خطّط لمغامرة صغيرة" } } } },
+    "Make something useful": { "localizations": { "ar": { "stringUnit": { "state": "translated", "value": "اصنع شيئًا مفيدًا" } } } },
+    "Share a good idea": { "localizations": { "ar": { "stringUnit": { "state": "translated", "value": "شارك فكرة جيدة" } } } }
+  },
+  "version": "1.0"
+}

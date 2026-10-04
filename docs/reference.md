@@ -167,6 +167,7 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | <code>auto_init</code> | <code>boolean</code> | No | <code>false</code> |  |
 | <code>runner</code> | <code>string</code> | No | <code>xcode-27</code> |  |
 | <code>platform_revision</code> | <code>string</code> | Yes | — |  |
+| <code>cli_version</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>release_run</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>version</code> | <code>string</code> | No | <code>1.0.0</code> |  |
 | <code>build_number</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
@@ -201,6 +202,10 @@ Triggers (cron expressions use UTC):
 ```
 
 Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"read"}</code>.
+
+| Input | Type | Required | Default | Description / choices |
+| --- | --- | --- | --- | --- |
+| <code>version</code> | <code>string</code> | No | <code>0.2.0-beta.1</code> | Native CLI package version |
 
 | Job | Needs | Execution | Condition |
 | --- | --- | --- | --- |

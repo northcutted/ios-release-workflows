@@ -23,6 +23,7 @@ pub struct Options {
     pub platform_revision: String,
     pub tracking: Option<bool>,
     pub non_exempt_encryption: Option<bool>,
+    pub runner: Option<String>,
 }
 fn choose(label: &str, values: &[String]) -> Result<String> {
     ensure!(
@@ -140,6 +141,7 @@ pub fn config_from_settings(
     let mut extensions = Vec::new();
     let mut tests = Vec::new();
     let mut catalogs = Vec::new();
+    let mut translations = std::collections::BTreeSet::new();
     for entry in entries {
         let s = &entry["buildSettings"];
         let product = s["PRODUCT_TYPE"].as_str().unwrap_or("");
@@ -215,6 +217,22 @@ pub fn config_from_settings(
         .unwrap();
     for entry in walk(root)? {
         if entry.extension().is_some_and(|e| e == "xcstrings") {
+            let catalog: Value = serde_json::from_slice(&fs::read(&entry)?)?;
+            for string in catalog["strings"]
+                .as_object()
+                .into_iter()
+                .flat_map(|m| m.values())
+            {
+                for locale in string["localizations"]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|m| m.keys())
+                {
+                    if Some(locale.as_str()) != catalog["sourceLanguage"].as_str() {
+                        translations.insert(locale.clone());
+                    }
+                }
+            }
             catalogs.push(entry.strip_prefix(root)?.to_string_lossy().into_owned());
         }
     }
@@ -245,6 +263,20 @@ pub fn config_from_settings(
             }
         }
     }
+    let configurations = scheme_configurations(root, project, scheme)?;
+    let mut config = json!({"schema_version":2,"scheme":scheme,"team_id":team,"test_targets":tests,"test_device":device,"xcode":xcode,"targets":app,"locales":["en-US"],"localization_catalogs":catalogs,"localization_locales":["en"],"screenshot_devices":[device],"screens":[],"signing":{"vault":".ios-release/signing.vault"},"configurations":{"test":"Debug","archive":"Release"},"app_store":{"bundle_id":bundle,"release_type":"MANUAL","phased_release":false,"testflight_groups":[]},"metadata_path":"store/metadata","screenshots_path":"store/screenshots"});
+    config[kind] = json!(project);
+    config["configurations"] = configurations;
+    config["localization_locales"] = json!(translations);
+    if let Some(repo) = &options.repository {
+        config["repository"] = json!(repo);
+    } else if let Ok(repo) = std::env::var("GITHUB_REPOSITORY") {
+        config["repository"] = json!(repo);
+    }
+    Ok(config)
+}
+
+pub fn scheme_configurations(root: &Path, project: &str, scheme: &str) -> Result<Value> {
     let mut configurations = json!({"test":"Debug","archive":"Release"});
     let scheme_file = root
         .join(project)
@@ -262,15 +294,7 @@ pub fn config_from_settings(
             }
         }
     }
-    let mut config = json!({"schema_version":2,"scheme":scheme,"team_id":team,"test_targets":tests,"test_device":device,"xcode":xcode,"targets":app,"locales":["en-US"],"localization_catalogs":catalogs,"localization_locales":["en"],"screenshot_devices":[device],"screens":[],"signing":{"vault":".ios-release/signing.vault"},"configurations":{"test":"Debug","archive":"Release"},"app_store":{"bundle_id":bundle,"release_type":"MANUAL","phased_release":false,"testflight_groups":[]},"metadata_path":"store/metadata","screenshots_path":"store/screenshots"});
-    config[kind] = json!(project);
-    config["configurations"] = configurations;
-    if let Some(repo) = &options.repository {
-        config["repository"] = json!(repo);
-    } else if let Ok(repo) = std::env::var("GITHUB_REPOSITORY") {
-        config["repository"] = json!(repo);
-    }
-    Ok(config)
+    Ok(configurations)
 }
 pub fn capabilities(entitlements: &Value) -> Vec<&'static str> {
     [
@@ -350,10 +374,29 @@ pub fn init(
             }
         }
         if !plan {
+            guide_declarations(&mut app.config, options)?;
             app.save()?;
         }
         return Ok(app.config);
     }
+    let repository_root = if options.no_workflows || plan {
+        root.clone()
+    } else {
+        checked(
+            executor,
+            &Step::new("git", ["rev-parse", "--show-toplevel"], 30),
+            &root,
+        )
+        .ok()
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| root.clone())
+        .canonicalize()?
+    };
+    ensure!(
+        root.starts_with(&repository_root),
+        "App must stay inside its repository"
+    );
     if !plan && !options.no_workflows {
         ensure!(
             options.platform_revision.len() == 40
@@ -364,7 +407,9 @@ pub fn init(
             "Pass a reviewed --platform-revision when using an unpackaged development binary"
         );
         ensure!(
-            !root.join(".github/workflows/ios-native.yml").exists(),
+            !repository_root
+                .join(".github/workflows/ios-native.yml")
+                .exists(),
             "Existing native workflow will not be overwritten"
         );
     }
@@ -438,6 +483,11 @@ pub fn init(
                 project.clone(),
                 "-scheme".into(),
                 scheme.clone(),
+                "-configuration".into(),
+                scheme_configurations(&root, &project, &scheme)?["archive"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
                 "-showBuildSettings".into(),
                 "-json".into(),
             ],
@@ -463,6 +513,7 @@ pub fn init(
             config["repository"] = json!(&captures[1]);
         }
     }
+    guide_declarations(&mut config, options)?;
     fsutil::json(&config_path, &config)?;
     let metadata = root.join("store/metadata/en-US");
     fs::create_dir_all(&metadata)?;
@@ -494,7 +545,24 @@ pub fn init(
     }
     fsutil::atomic(&ignore, text.as_bytes())?;
     if !options.no_workflows {
-        write_workflow(&root, &options.platform_revision)?;
+        let app_path = root.strip_prefix(&repository_root)?.to_string_lossy();
+        let app_path = if app_path.is_empty() { "." } else { &app_path };
+        let runner = options.runner.as_deref().unwrap_or(
+            if config["xcode"]["version"]
+                .as_str()
+                .is_some_and(|v| v.starts_with("27."))
+            {
+                "xcode-27"
+            } else {
+                "macos-26"
+            },
+        );
+        write_workflow_for(
+            &repository_root,
+            &options.platform_revision,
+            app_path,
+            runner,
+        )?;
     }
     println!(
         "Initialized {scheme}. Next: ios-release auth login, ios-release signing sync, then ios-release release prepare. Review encryption/tracking declarations and fill store/metadata before submission."
@@ -502,6 +570,11 @@ pub fn init(
     Ok(config)
 }
 pub fn write_workflow(root: &Path, revision: &str) -> Result<()> {
+    write_workflow_for(root, revision, ".", "xcode-27")
+}
+pub fn write_workflow_for(root: &Path, revision: &str, app_root: &str, runner: &str) -> Result<()> {
+    relative_path(app_root)?;
+    crate::github::validate_runner(runner)?;
     ensure!(
         revision.len() == 40 && revision.bytes().all(|c| c.is_ascii_hexdigit()),
         "GitHub Actions must pin a full reviewed platform commit; pass --platform-revision"
@@ -511,8 +584,72 @@ pub fn write_workflow(root: &Path, revision: &str) -> Result<()> {
         !path.exists(),
         "Existing native workflow will not be overwritten"
     );
-    let text = include_str!("../assets/native-call.yml").replace("__PLATFORM_REVISION__", revision);
+    let text = include_str!("../assets/native-call.yml")
+        .replace("__PLATFORM_REVISION__", revision)
+        .replace("__APP_ROOT__", &serde_json::to_string(app_root)?)
+        .replace("__RUNNER__", &serde_json::to_string(runner)?)
+        .replace(
+            "__CLI_VERSION__",
+            &serde_json::to_string(env!("IOS_RELEASE_DISTRIBUTION_VERSION"))?,
+        );
     fsutil::atomic(&path, text.as_bytes())
+}
+fn guide_declarations(config: &mut Value, options: &Options) -> Result<()> {
+    if !std::io::IsTerminal::is_terminal(&io::stdin()) {
+        return Ok(());
+    }
+    if config["team_id"] == "" {
+        print!("Apple Team ID from developer.apple.com/account (Enter to configure later): ");
+        io::stdout().flush()?;
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer)?;
+        let answer = answer.trim();
+        ensure!(
+            answer.is_empty()
+                || (answer.len() == 10 && answer.bytes().all(|c| c.is_ascii_alphanumeric())),
+            "Apple Team ID must be 10 letters/numbers"
+        );
+        config["team_id"] = json!(answer);
+    }
+    for (key, supplied, question) in [
+        (
+            "tracking",
+            options.tracking,
+            "Does this app track users across other companies' apps/websites?",
+        ),
+        (
+            "non_exempt_encryption",
+            options.non_exempt_encryption,
+            "Does it use encryption that is not exempt under Apple's export compliance rules?",
+        ),
+    ] {
+        if supplied.is_some()
+            || config["targets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|t| t[key].is_boolean())
+        {
+            continue;
+        }
+        println!("{question}");
+        print!("yes/no, or Enter to review later: ");
+        io::stdout().flush()?;
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer)?;
+        let value = match answer.trim().to_ascii_lowercase().as_str() {
+            "yes" | "y" => Some(true),
+            "no" | "n" => Some(false),
+            "" => None,
+            _ => bail!("Enter yes, no or leave this declaration for later"),
+        };
+        if let Some(value) = value {
+            for target in config["targets"].as_array_mut().unwrap() {
+                target[key] = json!(value);
+            }
+        }
+    }
+    Ok(())
 }
 pub fn auth_home() -> Result<PathBuf> {
     Ok(

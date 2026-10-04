@@ -59,6 +59,8 @@ enum Commands {
         tracking: Option<bool>,
         #[arg(long,action=clap::ArgAction::Set)]
         non_exempt_encryption: Option<bool>,
+        #[arg(long, help = "Hosted macOS runner for the generated Actions workflow")]
+        runner: Option<String>,
         #[arg(long,default_value=env!("IOS_RELEASE_BUILD_REVISION"))]
         platform_revision: String,
     },
@@ -213,6 +215,12 @@ enum Release {
 }
 #[derive(Subcommand)]
 enum Store {
+    BetaGroups {
+        #[arg(long)]
+        create: Option<String>,
+        #[arg(long, requires = "create")]
+        external: bool,
+    },
     Validate,
     Publish {
         #[arg(long)]
@@ -306,6 +314,7 @@ fn run(cli: Cli) -> Result<i32> {
         platform_revision,
         tracking,
         non_exempt_encryption,
+        runner,
     } = &command
     {
         let options = onboarding::Options {
@@ -319,6 +328,7 @@ fn run(cli: Cli) -> Result<i32> {
             platform_revision: platform_revision.clone(),
             tracking: *tracking,
             non_exempt_encryption: *non_exempt_encryption,
+            runner: runner.clone(),
         };
         println!(
             "{}",
@@ -518,7 +528,7 @@ fn run(cli: Cli) -> Result<i32> {
             if cli.plan {
                 println!(
                     "{}",
-                    json!({"operation":"store","release":directory,"apple_mutations":!matches!(action,Store::Status|Store::Validate|Store::Wait{..}),"submission_requires_confirmation":matches!(action,Store::Submit{..}),"bundle_id":app.config["app_store"]["bundle_id"]})
+                    json!({"operation":"store","release":directory,"apple_mutations":!matches!(action,Store::Status|Store::Validate|Store::BetaGroups{create:None,..}|Store::Wait{..}),"submission_requires_confirmation":matches!(action,Store::Submit{..}),"bundle_id":app.config["app_store"]["bundle_id"]})
                 );
                 return Ok(0);
             }
@@ -534,6 +544,18 @@ fn run(cli: Cli) -> Result<i32> {
                 return Ok(0);
             }
             let mut api = Apple::new()?;
+            if let Store::BetaGroups { create, external } = action {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&store::beta_groups(
+                        &mut app,
+                        &mut api,
+                        create.as_deref(),
+                        external
+                    )?)?
+                );
+                return Ok(0);
+            }
             if matches!(action, Store::Status) {
                 println!(
                     "{}",
@@ -557,7 +579,7 @@ fn run(cli: Cli) -> Result<i32> {
                 }
                 Store::Metadata => metadata::sync(&app, &mut release, &mut api)?,
                 Store::Submit { confirm } => store::submit(&app, &mut release, &mut api, confirm)?,
-                Store::Status | Store::Validate => unreachable!(),
+                Store::Status | Store::Validate | Store::BetaGroups { .. } => unreachable!(),
             }
             println!("{}", serde_json::to_string_pretty(&release.receipt)?);
         }

@@ -17,8 +17,163 @@ use p256::{
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path};
+mod support;
 
 const PASSWORD: &str = "separate signing test password";
+
+#[test]
+fn nonexistent_output_parents_cannot_hide_traversal_outside_the_app() {
+    let (_root, app) = app();
+    assert!(fsutil::confined(&app.root, &app.root.join("build/new/../../../outside")).is_err());
+    assert!(!app.root.join("build/new").exists());
+}
+
+#[test]
+fn signing_transfer_rejects_wrong_source_paths_hashes_and_partial_updates() {
+    use ios_release_native::signing_inputs::{apply_for_source, export_for_source};
+    let (_root, app) = app();
+    let project = app.root.join("OrbitNotes.xcodeproj/project.pbxproj");
+    fsutil::atomic(&project, b"original project").unwrap();
+    fsutil::atomic(&signing::path(&app).unwrap(), b"encrypted vault fixture").unwrap();
+    let transfer = app.root.join("build/signing.json");
+    let sha = "a".repeat(40);
+    export_for_source(&app, &transfer, &sha).unwrap();
+    let original: Value = serde_json::from_slice(&fs::read(&transfer).unwrap()).unwrap();
+    apply_for_source(&app, &transfer, &sha).unwrap();
+    assert!(apply_for_source(&app, &transfer, &"b".repeat(40)).is_err());
+    for key in ["path", "sha256", "content"] {
+        let mut changed = original.clone();
+        let last = changed["files"].as_array().unwrap().len() - 1;
+        changed["files"][last][key] = json!(match key {
+            "path" => "../outside.p8",
+            "sha256" => "wrong checksum",
+            _ => "dGFtcGVyZWQ=",
+        });
+        fsutil::json(&transfer, &changed).unwrap();
+        let before = fs::read(&app.config_path).unwrap();
+        assert!(apply_for_source(&app, &transfer, &sha).is_err());
+        assert_eq!(fs::read(&app.config_path).unwrap(), before);
+        assert_eq!(fs::read(&project).unwrap(), b"original project");
+    }
+}
+#[test]
+fn authenticated_run_and_invocation_must_match_the_selected_preparation() {
+    use ios_release_native::github::{validate_invocation, validate_run};
+    let value = json!({"id":42,"repository":{"full_name":"Owner/App"},"conclusion":"success","head_branch":"main","event":"workflow_dispatch","head_sha":"a".repeat(40)});
+    assert_eq!(
+        validate_run(&value, "owner/app", 42).unwrap(),
+        "a".repeat(40)
+    );
+    assert!(validate_run(&value, "owner/other", 42).is_err());
+    assert!(validate_run(&value, "owner/app", 43).is_err());
+    for (key, invalid) in [
+        ("conclusion", "failure"),
+        ("event", "pull_request"),
+        ("head_branch", "feature"),
+        ("head_sha", "main"),
+    ] {
+        let mut wrong = value.clone();
+        wrong[key] = json!(invalid);
+        assert!(validate_run(&wrong, "owner/app", 42).is_err());
+    }
+    let proof = json!([{"verificationResult":{"statement":{"predicate":{"runDetails":{"metadata":{"invocationId":"https://github.com/Owner/App/actions/runs/42/attempts/1"}}}}}}]);
+    assert!(validate_invocation(&proof, "owner/app", 42).is_ok());
+    assert!(validate_invocation(&proof, "owner/app", 43).is_err());
+    assert!(validate_invocation(&proof, "owner/other", 42).is_err());
+    assert!(validate_invocation(&json!([]), "owner/app", 42).is_err());
+}
+fn local_metadata(app: &App, locale: &str) {
+    let folder = app.path("metadata_path").unwrap().join(locale);
+    for (file, value) in [
+        ("name.txt", "Orbit Notes"),
+        ("description.txt", "Keep your notes on your device."),
+        ("support_url.txt", "https://example.com/support"),
+        ("privacy_url.txt", "https://example.com/privacy"),
+    ] {
+        fsutil::atomic(&folder.join(file), value.as_bytes()).unwrap();
+    }
+}
+#[test]
+fn metadata_preflight_rejects_placeholders_bad_urls_and_missing_locales() {
+    let (_root, app) = app();
+    local_metadata(&app, "en-US");
+    assert!(metadata::preflight(&app).is_ok());
+    let folder = app.path("metadata_path").unwrap().join("en-US");
+    for (file, value) in [
+        ("description.txt", "Describe what your app does."),
+        ("support_url.txt", "not a URL"),
+        (
+            "privacy_url.txt",
+            "https://password:secret@example.com/privacy",
+        ),
+    ] {
+        fsutil::atomic(&folder.join(file), value.as_bytes()).unwrap();
+        assert!(metadata::preflight(&app).is_err());
+        local_metadata(&app, "en-US");
+    }
+    local_metadata(&app, "de-DE");
+    fs::remove_file(
+        app.path("metadata_path")
+            .unwrap()
+            .join("de-DE/privacy_url.txt"),
+    )
+    .unwrap();
+    assert!(metadata::preflight(&app).is_err());
+    let mut candidate = candidate(&app);
+    let mut server = AppleFixture::default();
+    assert!(metadata::sync(&app, &mut candidate, &mut server).is_err());
+    assert!(server.calls.is_empty());
+}
+#[test]
+fn sealed_release_requires_a_complete_verified_bundle_inventory() {
+    let (_root, app) = app();
+    let release = candidate(&app);
+    let mut archive: Value =
+        serde_json::from_slice(&fs::read(release.directory.join("archive.json")).unwrap()).unwrap();
+    assert!(release::validate_inventory(&app, &archive).is_ok());
+    archive["applications"] = json!([]);
+    assert!(release::validate_inventory(&app, &archive).is_err());
+}
+#[test]
+fn release_package_contains_only_the_five_verified_public_inputs() {
+    let (_root, app) = app();
+    let release = candidate(&app);
+    fsutil::atomic(&release.directory.join("private.p8"), b"private key").unwrap();
+    let package = app.root.join("build/native-release.zip");
+    release::pack(&app, &release.directory, &package).unwrap();
+    let zip = zip::ZipArchive::new(fs::File::open(package).unwrap()).unwrap();
+    assert_eq!(zip.len(), 5);
+    assert!(
+        !zip.file_names()
+            .any(|n| n == "operation.json" || n == "private.p8")
+    );
+}
+#[test]
+fn generated_workflow_supports_an_app_inside_a_repository() {
+    let dir = tempfile::tempdir().unwrap();
+    onboarding::write_workflow_for(dir.path(), &"a".repeat(40), "apps/OrbitNotes", "macos-26")
+        .unwrap();
+    let content = fs::read_to_string(dir.path().join(".github/workflows/ios-native.yml")).unwrap();
+    assert!(content.contains("app_root: \"apps/OrbitNotes\""));
+    assert!(content.contains("runner: \"macos-26\""));
+    assert!(
+        onboarding::write_workflow_for(dir.path(), &"a".repeat(40), "../other", "self-hosted")
+            .is_err()
+    );
+}
+#[test]
+fn child_receives_private_stdin_without_including_it_in_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("secret");
+    fsutil::atomic(&input, b"private stdin fixture").unwrap();
+    let mut step = Step::new("/bin/cat", std::iter::empty::<String>(), 2);
+    step.stdin_file = Some(input);
+    assert!(step.args.is_empty());
+    assert_eq!(
+        Native.run(&step, dir.path(), None).unwrap().stdout,
+        "private stdin fixture"
+    );
+}
 fn config() -> Value {
     json!({"schema_version":2,"project":"OrbitNotes.xcodeproj","scheme":"OrbitNotes","team_id":"ABCDE12345","test_targets":["OrbitNotesTests"],"test_device":"iPhone 18 Pro Max","xcode":{"path":"/Applications/Xcode.app/Contents/Developer","version":"27.0","build":"18A123","sdk":"27.0","runtime":"27.0"},"configurations":{"test":"Debug","archive":"AppStore"},"qa_checks":["test"],"targets":[{"name":"OrbitNotes","bundle_id":"dev.example.OrbitNotes","profile":"Orbit App Store","tracking":false,"non_exempt_encryption":false,"entitlements":{}}],"app_store":{"bundle_id":"dev.example.OrbitNotes","release_type":"MANUAL","testflight_groups":["beta"]}})
 }
@@ -348,6 +503,116 @@ fn step_local_secrets_are_used_without_global_environment_mutation() {
 }
 
 #[derive(Default)]
+struct MetadataFixture {
+    resources: BTreeMap<String, Value>,
+    posts: usize,
+    patches: usize,
+    mismatch: bool,
+}
+impl Api for MetadataFixture {
+    fn request(
+        &mut self,
+        method: &str,
+        path: &str,
+        query: &[(String, String)],
+        body: Option<&Value>,
+    ) -> Result<Value> {
+        support::validate(method, path, query, body)?;
+        if path == "/v1/apps" {
+            return Ok(
+                json!({"data":[{"id":"app","attributes":{"bundleId":"dev.example.OrbitNotes"}}]}),
+            );
+        }
+        if path == "/v1/apps/app/appInfos" {
+            return Ok(
+                json!({"data":[{"id":"info","attributes":{"state":"PREPARE_FOR_SUBMISSION"}}]}),
+            );
+        }
+        if method == "POST" {
+            self.posts += 1;
+            let mut value = body.unwrap()["data"].clone();
+            value["id"] = json!(format!("resource-{}", self.posts));
+            let route = format!(
+                "/v1/{}/{}",
+                value["type"].as_str().unwrap(),
+                value["id"].as_str().unwrap()
+            );
+            self.resources.insert(route, value.clone());
+            return Ok(json!({"data":value}));
+        }
+        if method == "PATCH" {
+            self.patches += 1;
+            let resource = self.resources.get_mut(path).unwrap();
+            for (key, value) in body.unwrap()["data"]["attributes"].as_object().unwrap() {
+                resource["attributes"][key] = value.clone();
+            }
+            return Ok(json!({"data":resource}));
+        }
+        if let Some(resource) = self.resources.get(path) {
+            let mut resource = resource.clone();
+            if self.mismatch {
+                resource["attributes"]["name"] = json!("Changed by another actor");
+            }
+            return Ok(json!({"data":resource}));
+        }
+        if path.ends_with("appStoreReviewDetail") {
+            return Ok(
+                json!({"data":self.resources.values().find(|v|v["type"]=="appStoreReviewDetails")}),
+            );
+        }
+        for kind in [
+            "appStoreVersionLocalizations",
+            "appInfoLocalizations",
+            "betaGroups",
+        ] {
+            if path.ends_with(kind) {
+                return Ok(
+                    json!({"data":self.resources.values().filter(|v|v["type"]==kind).collect::<Vec<_>>()}),
+                );
+            }
+        }
+        bail!("Unexpected metadata fixture endpoint {method} {path}")
+    }
+    fn transfer(&mut self, _: &Path, _: &Value) -> Result<()> {
+        bail!("No screenshot assets in this fixture")
+    }
+}
+#[test]
+fn locale_and_review_metadata_use_current_apple_contracts_and_readback() {
+    let (_root, app) = app();
+    local_metadata(&app, "en-US");
+    fsutil::json(&app.root.join("store/review.json"), &json!({"contactFirstName":"App","contactLastName":"Owner","contactPhone":"+1 555 0100","contactEmail":"owner@example.com","demoAccountRequired":false,"notes":"All features work offline."})).unwrap();
+    let mut candidate = candidate(&app);
+    candidate
+        .checkpoint(json!({"version_id":"version"}))
+        .unwrap();
+    let mut server = MetadataFixture::default();
+    metadata::sync(&app, &mut candidate, &mut server).unwrap();
+    assert_eq!(server.posts, 3);
+    metadata::sync(&app, &mut candidate, &mut server).unwrap();
+    assert_eq!(server.posts, 3);
+    assert_eq!(server.patches, 3);
+    server.mismatch = true;
+    assert!(metadata::sync(&app, &mut candidate, &mut server).is_err());
+}
+#[test]
+fn beta_group_setup_reuses_the_app_group_and_saves_its_id() {
+    let (_root, mut app) = app();
+    app.config["app_store"]["testflight_groups"] = json!([]);
+    let mut server = MetadataFixture::default();
+    let created = store::beta_groups(&mut app, &mut server, Some("Team"), false).unwrap();
+    assert_eq!(
+        app.config["app_store"]["testflight_groups"],
+        json!([created["id"]])
+    );
+    store::beta_groups(&mut app, &mut server, Some("Team"), false).unwrap();
+    assert_eq!(server.posts, 1);
+    assert!(store::beta_groups(&mut app, &mut server, Some("Team"), true).is_err());
+    let list = store::beta_groups(&mut app, &mut server, None, false).unwrap();
+    assert_eq!(list["groups"][0]["name"], "Team");
+}
+
+#[derive(Default)]
 struct AppleFixture {
     upload: Option<Value>,
     file: Option<Value>,
@@ -393,6 +658,7 @@ impl Api for AppleFixture {
         query: &[(String, String)],
         data: Option<&Value>,
     ) -> Result<Value> {
+        support::validate(method, path, query, data)?;
         let key = format!("{method} {path}");
         *self.calls.entry(key.clone()).or_default() += 1;
         let body = data.cloned().unwrap_or(Value::Null);
@@ -509,6 +775,20 @@ impl Api for AppleFixture {
         assert_eq!(fs::read(file)?, b"fixture IPA bytes");
         Ok(())
     }
+}
+#[test]
+fn prepared_release_keeps_its_reviewed_release_and_encryption_policy() {
+    let (_root, mut app) = app();
+    let mut release = candidate(&app);
+    app.config["app_store"]["release_type"] = json!("AFTER_APPROVAL");
+    app.config["targets"][0]["non_exempt_encryption"] = json!(true);
+    let mut server = AppleFixture::done();
+    server.complete(&release);
+    store::stage(&app, &mut release, &mut server).unwrap();
+    assert_eq!(
+        server.version.unwrap()["attributes"]["releaseType"],
+        "MANUAL"
+    );
 }
 #[test]
 fn native_upload_stage_and_review_are_idempotent() {

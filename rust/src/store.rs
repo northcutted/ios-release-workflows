@@ -75,11 +75,75 @@ pub fn next_number(app: &App, api: &mut impl Api) -> Result<String> {
         .context("Build number overflow")?
         .to_string())
 }
+pub fn beta_groups(
+    app: &mut App,
+    api: &mut impl Api,
+    create: Option<&str>,
+    external: bool,
+) -> Result<Value> {
+    let app_id = app_id(app, api)?;
+    let groups = api::list(
+        api,
+        &format!("/v1/apps/{app_id}/betaGroups"),
+        &api::query(&[("limit", "200")]),
+    )?;
+    if let Some(name) = create {
+        ensure!(
+            !name.trim().is_empty() && name.len() <= 100 && !name.contains(['\n', '\r', '\0']),
+            "Choose a nonempty beta group name"
+        );
+        let matching = groups
+            .iter()
+            .filter(|g| g["attributes"]["name"] == name)
+            .collect::<Vec<_>>();
+        ensure!(
+            matching.len() <= 1,
+            "More than one beta group has this name; select it in App Store Connect"
+        );
+        let group = if let Some(existing) = matching.first() {
+            (*existing).clone()
+        } else {
+            api.request("POST", "/v1/betaGroups", &[], Some(&json!({"data":{"type":"betaGroups","attributes":{"name":name,"isInternalGroup":!external,"hasAccessToAllBuilds":false,"publicLinkEnabled":false},"relationships":{"app":{"data":{"type":"apps","id":app_id}}}}})))?["data"].clone()
+        };
+        let id = api::id(&group)?;
+        let actual = api.request(
+            "GET",
+            &format!("/v1/betaGroups/{id}"),
+            &api::query(&[("include", "app")]),
+            None,
+        )?;
+        ensure!(
+            actual["data"]["relationships"]["app"]["data"]["id"] == app_id
+                && actual["data"]["attributes"]["name"] == name
+                && actual["data"]["attributes"]["isInternalGroup"] == !external,
+            "Beta group readback differs from the requested app/name/type"
+        );
+        if app.config["app_store"]["testflight_groups"].is_null() {
+            app.config["app_store"]["testflight_groups"] = json!([]);
+        }
+        let configured = app.config["app_store"]["testflight_groups"]
+            .as_array_mut()
+            .context("Configured TestFlight groups must be a list")?;
+        if !configured.iter().any(|v| v == id) {
+            configured.push(json!(id));
+        }
+        app.save()?;
+        println!(
+            "Configured beta group {name}. Commit the app configuration before preparing a release. Manage testers in https://appstoreconnect.apple.com/apps/{app_id}/testflight."
+        );
+        Ok(json!({"id":id,"name":name,"external":external}))
+    } else {
+        Ok(
+            json!({"groups":groups.iter().map(|g| json!({"id":g["id"],"name":g["attributes"]["name"],"internal":g["attributes"]["isInternalGroup"],"public_link":g["attributes"]["publicLink"]})).collect::<Vec<_>>() }),
+        )
+    }
+}
 
 pub struct Release {
     pub directory: PathBuf,
     pub manifest: Value,
     pub receipt: Value,
+    pub app_config: Value,
 }
 impl Release {
     pub fn load(app: &App, directory: &Path) -> Result<Self> {
@@ -182,6 +246,7 @@ impl Release {
             directory,
             manifest,
             receipt,
+            app_config: sealed_app.config,
         })
     }
     pub fn checkpoint(&mut self, values: Value) -> Result<()> {
@@ -427,7 +492,7 @@ pub fn stage(app: &App, release: &mut Release, api: &mut impl Api) -> Result<Str
     let version = if let Some(v) = version_record(app, release, api)? {
         v
     } else {
-        api.request("POST","/v1/appStoreVersions",&[],Some(&json!({"data":{"type":"appStoreVersions","attributes":{"platform":"IOS","versionString":release.version(),"releaseType":app.config["app_store"]["release_type"].as_str().unwrap_or("MANUAL")},"relationships":{"app":{"data":{"type":"apps","id":app_id}}}}})))?["data"].clone()
+        api.request("POST","/v1/appStoreVersions",&[],Some(&json!({"data":{"type":"appStoreVersions","attributes":{"platform":"IOS","versionString":release.version(),"releaseType":release.app_config["app_store"]["release_type"].as_str().unwrap_or("MANUAL")},"relationships":{"app":{"data":{"type":"apps","id":app_id}}}}})))?["data"].clone()
     };
     let version_id = api::id(&version)?.to_owned();
     ensure!(
@@ -470,8 +535,8 @@ pub fn stage(app: &App, release: &mut Release, api: &mut impl Api) -> Result<Str
         "Selected build readback differs"
     );
     release.checkpoint(json!({"version_id":version_id,"status":"staged"}))?;
-    apply_release_policy(app, &version, api)?;
-    encryption(app, &build, api)?;
+    apply_release_policy(&release.app_config, &version, api)?;
+    encryption(release, &build, api)?;
     Ok(version_id)
 }
 pub fn submit(app: &App, release: &mut Release, api: &mut impl Api, confirmed: bool) -> Result<()> {
@@ -596,7 +661,7 @@ pub fn submit(app: &App, release: &mut Release, api: &mut impl Api, confirmed: b
 pub fn testflight(app: &App, release: &mut Release, api: &mut impl Api) -> Result<()> {
     let build = processed(app, release, api)?.context("Build is not ready for TestFlight")?;
     let app_id = app_id(app, api)?;
-    encryption(app, &build, api)?;
+    encryption(release, &build, api)?;
     let mut external = false;
     for group in app.config["app_store"]["testflight_groups"]
         .as_array()
@@ -675,8 +740,8 @@ pub fn testflight(app: &App, release: &mut Release, api: &mut impl Api) -> Resul
         .checkpoint(json!({"status":if external{"testflight-review-requested"}else{"testflight"}}))
 }
 
-fn encryption(app: &App, build: &Value, api: &mut impl Api) -> Result<()> {
-    let expected = app.config["targets"][0]["non_exempt_encryption"]
+fn encryption(release: &Release, build: &Value, api: &mut impl Api) -> Result<()> {
+    let expected = release.app_config["targets"][0]["non_exempt_encryption"]
         .as_bool()
         .context("Declare the app encryption policy before delivery")?;
     if build["attributes"]["usesNonExemptEncryption"].as_bool() == Some(expected) {
@@ -695,9 +760,9 @@ fn encryption(app: &App, build: &Value, api: &mut impl Api) -> Result<()> {
     );
     Ok(())
 }
-fn apply_release_policy(app: &App, version: &Value, api: &mut impl Api) -> Result<()> {
+fn apply_release_policy(config: &Value, version: &Value, api: &mut impl Api) -> Result<()> {
     let id = api::id(version)?;
-    let kind = app.config["app_store"]["release_type"]
+    let kind = config["app_store"]["release_type"]
         .as_str()
         .unwrap_or("MANUAL");
     ensure!(
@@ -705,8 +770,15 @@ fn apply_release_policy(app: &App, version: &Value, api: &mut impl Api) -> Resul
         "Invalid release_type; choose MANUAL, AFTER_APPROVAL or SCHEDULED"
     );
     let mut attributes = json!({"releaseType":kind});
+    if let Some(value) = config["app_store"]["copyright"].as_str() {
+        ensure!(
+            !value.is_empty() && value.len() <= 1000,
+            "Set a valid App Store copyright"
+        );
+        attributes["copyright"] = json!(value);
+    }
     if kind == "SCHEDULED" {
-        let date = app.config["app_store"]["earliest_release_date"]
+        let date = config["app_store"]["earliest_release_date"]
             .as_str()
             .context("Scheduled release needs earliest_release_date")?;
         time::OffsetDateTime::parse(date, &time::format_description::well_known::Rfc3339)?;
@@ -728,7 +800,7 @@ fn apply_release_policy(app: &App, version: &Value, api: &mut impl Api) -> Resul
                 .all(|(k, v)| actual["data"]["attributes"][k] == *v),
             "Release policy readback differs"
         );
-        if app.config["app_store"]["phased_release"] == true {
+        if config["app_store"]["phased_release"] == true {
             let existing = api::optional(
                 api,
                 &format!("/v1/appStoreVersions/{id}/appStoreVersionPhasedRelease"),

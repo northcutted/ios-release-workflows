@@ -35,6 +35,13 @@ pub fn export(app: &App, output: &Path) -> Result<()> {
     let source = std::env::var("SOURCE_SHA")
         .or_else(|_| std::env::var("GITHUB_SHA"))
         .context("Signing transfer needs an explicit source SHA")?;
+    export_for_source(app, output, &source)
+}
+pub fn export_for_source(app: &App, output: &Path, source: &str) -> Result<()> {
+    ensure!(
+        source.len() == 40 && source.bytes().all(|c| c.is_ascii_hexdigit()),
+        "Signing transfer requires a full source SHA"
+    );
     let mut files = vec![];
     for name in paths(app)? {
         let path = app.root.join(&name);
@@ -48,10 +55,17 @@ pub fn export(app: &App, output: &Path) -> Result<()> {
     )
 }
 pub fn apply(app: &App, input: &Path) -> Result<()> {
-    let value: Value = serde_json::from_slice(&fs::read(input)?)?;
     let source = std::env::var("SOURCE_SHA")
         .or_else(|_| std::env::var("GITHUB_SHA"))
         .context("Signing transfer needs an explicit source SHA")?;
+    apply_for_source(app, input, &source)
+}
+pub fn apply_for_source(app: &App, input: &Path, source: &str) -> Result<()> {
+    ensure!(
+        fs::metadata(input)?.len() <= 64 * 1024 * 1024,
+        "Signing transfer is too large"
+    );
+    let value: Value = serde_json::from_slice(&fs::read(input)?)?;
     ensure!(
         value["schema_version"] == 1
             && value["source_sha"] == source

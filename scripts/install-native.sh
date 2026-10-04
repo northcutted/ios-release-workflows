@@ -2,6 +2,7 @@
 set -euo pipefail
 version="${1:-0.2.0-beta.1}"
 prefix="${2:-${HOME}/.local}"
+expected_revision="${3:-}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$ ]] || { echo 'Pass a published native CLI version.' >&2; exit 1; }
 command -v gh >/dev/null || { echo 'Install GitHub CLI (brew install gh), then run gh auth login.' >&2; exit 1; }
 case "$(uname -s):$(uname -m)" in
@@ -17,6 +18,9 @@ tag="native-v${version}"
 binary="ios-release-${asset}"
 source="$(gh api --hostname github.com "repos/$repo/git/ref/tags/$tag" --jq 'select(.object.type == "commit") | .object.sha')"
 [[ "$source" =~ ^[a-f0-9]{40}$ ]] || { echo 'Release tag must identify an exact source commit.' >&2; exit 1; }
+if test -n "$expected_revision"; then
+  [[ "$expected_revision" =~ ^[a-f0-9]{40}$ ]] && test "$source" = "$expected_revision" || { echo 'Packaged binary source does not match the pinned workflow.' >&2; exit 1; }
+fi
 GH_HOST=github.com gh release download "$tag" --repo "$repo" --pattern "$binary" --pattern SHA256SUMS --dir "$task_temp"
 expected="$(awk -v file="$binary" '$2 == file {print $1}' "$task_temp/SHA256SUMS")"
 [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || { echo 'Published checksum is missing or ambiguous.' >&2; exit 1; }

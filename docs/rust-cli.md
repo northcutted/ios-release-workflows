@@ -44,6 +44,7 @@ Use the binary by its full path while evaluating it. Do not replace the existing
 | `github setup`, `github fetch` | Configures protected native environments or downloads an authenticated preparation and recovery receipt |
 | `store upload`, `store wait`, `store testflight` | Transfers the exact IPA, reconciles Apple processing and assigns beta groups |
 | `store stage`, `store metadata`, `store submit --confirm` | Selects the exact build, applies content and requests review |
+| `store validate`, `store beta-groups --create …` | Checks local store content before writes and configures an app-owned beta group by name |
 | `store publish --confirm`, `store phased …`, `status` | Publishes an approved version, manages phased updates and reads production state |
 
 QA keeps the existing `qa-results/<check>/result.json`, `report.junit`, and `build/build-env.json` contracts. A nonzero Xcode exit remains a failure even if the xcresult says passed. Missing or inconsistent evidence fails. Stale JUnit is removed before execution.
