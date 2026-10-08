@@ -684,7 +684,23 @@ fn public_diagnostics_work_without_app_configuration() {
     assert_eq!(contract["schema_version"], 1);
     assert!(contract["commands"]["qa"]["description"].is_string());
     assert_eq!(contract["apple_store_mutations"], true);
-    assert!(execute(&["doctor"]).status.success());
+    let doctor = execute(&["doctor"]);
+    assert!(doctor.status.success());
+    let doctor: Value = serde_json::from_slice(&doctor.stdout).unwrap();
+    let distribution = env!("IOS_RELEASE_DISTRIBUTION_VERSION");
+    let expected = if distribution.is_empty() {
+        env!("CARGO_PKG_VERSION")
+    } else {
+        distribution
+    };
+    assert_eq!(doctor["version"], expected);
+    assert_eq!(doctor["cargo_version"], env!("CARGO_PKG_VERSION"));
+    let version = execute(&["--version"]);
+    assert!(version.status.success());
+    assert_eq!(
+        String::from_utf8(version.stdout).unwrap().trim(),
+        format!("ios-release {expected}")
+    );
     assert!(execute(&["qa", "--help"]).status.success());
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
 }

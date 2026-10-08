@@ -1,0 +1,22 @@
+name: Adoption feedback or feature request
+description: Tell us what would make ios-release work for your app
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to ship or manage?
+      description: Describe the app/release workflow and where adoption gets difficult. Keep credentials and private app data out of the report.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current setup
+      description: Xcode project/workspace, extensions, CI host, and any Fastlane lanes/plugins or store operations you depend on.
+  - type: textarea
+    id: improvement
+    attributes:
+      label: Desired behavior
+      description: What would a useful outcome look like? Include CLI/source version if reporting an onboarding problem.
+    validations:
+      required: true

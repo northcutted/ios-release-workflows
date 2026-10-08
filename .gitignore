@@ -9,3 +9,5 @@ build/
 release-assets/
 .DS_Store
 rust/target/
+rust/dist/
+qa-results/
