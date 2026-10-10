@@ -13,7 +13,7 @@ verified IPA, and carry that same build through TestFlight and App Review.
 ```sh
 ios-release init
 ios-release qa all
-ios-release signing sync
+# After connecting Apple access and signing in the quickstart:
 ios-release release prepare --version 1.0.0
 ```
 
@@ -78,6 +78,7 @@ Apple's account setup and app declarations remain yours to complete.
 | I want to… | Guide |
 | --- | --- |
 | Try it without an Apple account | [Orbit Notes example](examples/OrbitNotes/README.md) |
+| Review my app settings | [Configuration](docs/native-configuration.md) |
 | Set up certificates and profiles | [Signing](docs/native-signing.md) |
 | Deliver or manage a release | [Releases and recovery](docs/native-releases.md) |
 | Capture App Store screenshots | [Screenshots](docs/native-screenshots.md) |
@@ -85,7 +86,8 @@ Apple's account setup and app declarations remain yours to complete.
 | Adopt it alongside Fastlane | [Migration](docs/from-fastlane.md) |
 | Understand beta coverage and limits | [Status](docs/native-status.md) |
 
-[All documentation](docs/README.md) · [Contributing](CONTRIBUTING.md) ·
+[All documentation](docs/README.md) · [Troubleshooting](docs/troubleshooting.md) ·
+[Contributing](CONTRIBUTING.md) ·
 [Report a bug](https://github.com/northcutted/ios-release-workflows/issues/new/choose)
 
 ## Existing platform consumers

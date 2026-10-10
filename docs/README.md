@@ -7,11 +7,13 @@ guide covers one part of shipping and maintaining an iPhone/iPad app.
 | --- | --- |
 | [Install](install.md) | Install a verified binary, choose a prefix, or build from source |
 | [Quickstart](native-quickstart.md) | Connect your app and get to your first release |
+| [Configuration](native-configuration.md) | Review app settings, QA, store policy, and committed files |
 | [Signing](native-signing.md) | Apple API access, encrypted vaults, existing certificates, renewal |
 | [Releases and recovery](native-releases.md) | GitHub Actions, local delivery, store content, production updates |
 | [Screenshots](native-screenshots.md) | App-owned UI tests, device/locale capture, simulator recovery |
 | [CLI reference](native-commands.md) | Commands, configuration selection, planning, evidence paths |
 | [From Fastlane](from-fastlane.md) | Rehearse adoption while retaining an existing release path |
+| [Troubleshooting](troubleshooting.md) | Diagnose installation, Xcode, signing, and interrupted operations |
 | [Beta status](native-status.md) | Supported platforms, validation evidence, and remaining work |
 | [Orbit Notes](../examples/OrbitNotes/README.md) | Try an unsigned app with a share extension and screenshot tests |
 

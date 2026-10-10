@@ -81,9 +81,13 @@ External groups trigger beta review; Apple still decides approval. Set
 (default), `AFTER_APPROVAL`, or `SCHEDULED`; scheduled releases also need
 `earliest_release_date`. Set `phased_release: true` to enable phased updates.
 
-For a local rehearsal or a release without Actions:
+## Use the local CLI
+
+For a local rehearsal or a release without Actions, validate content before
+preparation and run build selection and content delivery separately:
 
 ```sh
+ios-release store validate
 ios-release release prepare --version 1.2.3
 ios-release store upload
 ios-release store wait
@@ -93,6 +97,10 @@ ios-release store metadata
 ios-release store submit --confirm
 ios-release status
 ```
+
+`store stage` selects the exact processed build and applies its prepared release
+policy. `store metadata` delivers content; the Actions **stage** operation runs
+both automatically.
 
 Preparation checks all configured QA, rejects stale source/test evidence, imports
 signing assets temporarily and validates every exported app/extension. It selects

@@ -40,7 +40,8 @@ Apple team, answer those declarations for every target, include each target's
 `PrivacyInfo.xcprivacy`, and declare encryption in its Info.plist. The CLI checks
 your declarations; you determine the correct answers for your app.
 
-Commit and review the generated configuration and workflow. The configured hosted
+Review the [configuration guide](native-configuration.md) and commit the generated
+configuration and workflow. The configured hosted
 runner must contain the exact Xcode version/build, SDK, and simulator runtime.
 Use `init --runner LABEL` to select a supported runner during initialization.
 
@@ -109,6 +110,9 @@ In the same Actions workflow, supply the preparation run ID and choose:
 3. **submit** to request App Review after production approval.
 4. **publish** when an approved version is awaiting manual release.
 
+In Actions, **stage** also applies metadata/screenshots. With the local CLI, run
+`store stage` to select the build, then `store metadata` to apply content.
+
 Use **status** to read current Apple state. Later updates reuse the same workflow;
 each new build starts with a new **prepare** run. Metadata and phased-release
 operations select an existing preparation.
@@ -116,3 +120,4 @@ operations select an existing preparation.
 [Releases and recovery](native-releases.md) covers all operations, local delivery,
 store content, interrupted requests, and preserving releases beyond 90 days.
 [Screenshots](native-screenshots.md) covers native UI-test capture.
+[Troubleshooting](troubleshooting.md) helps diagnose a failed step.

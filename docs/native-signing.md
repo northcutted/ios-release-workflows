@@ -18,7 +18,7 @@ ios-release signing sync
 ios-release signing status
 ```
 
-`signing sync` prompts for a unique signing-vault password. Keep it in your password
+`signing sync` prompts for a signing-vault password of at least 16 characters. Keep it in your password
 manager. It registers bundle IDs, enables declared capabilities, reuses a matching
 distribution certificate, creates app-specific App Store profiles, and configures
 manual signing for the archive configuration. Debug and test signing stay separate.

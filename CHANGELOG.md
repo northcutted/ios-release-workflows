@@ -10,6 +10,8 @@ for package assets and provenance.
 - Consumer-first README, verified install instructions, focused signing/release/
   screenshot guides, and a Fastlane adoption guide.
 - Public beta support/validation matrix with links to fixed hosted evidence.
+- Native configuration and troubleshooting guides; distinguish local build
+  selection from metadata delivery and document existing-config initialization.
 - Descriptive native CLI help and distribution-version diagnostics.
 - Native contributor commands and structured bug/adoption reports.
 
