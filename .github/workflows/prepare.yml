@@ -47,7 +47,7 @@ jobs:
         run: python3 "$IOS_RELEASE_ROOT/scripts/ci/candidate_context.py"
         id: context
       - name: Retain version artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: version-${{ steps.context.outputs.prefix }}
           path: build/version/
@@ -91,7 +91,7 @@ jobs:
           RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
       - name: Upload package-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: package-${{ needs.version.outputs.prefix }}
           path: build/package/
@@ -160,7 +160,7 @@ jobs:
           RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
       - name: Upload build-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: build-${{ needs.version.outputs.prefix }}
           path: build/release/
@@ -177,7 +177,7 @@ jobs:
           if [ -d build/logs ]; then cp -R build/logs build/archive-diagnostics/; fi
         if: always()
       - name: Upload archive-diagnostics-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: archive-diagnostics-${{ needs.version.outputs.prefix }}
           path: build/archive-diagnostics/
@@ -230,7 +230,7 @@ jobs:
           python3 "$IOS_RELEASE_ROOT/scripts/ci/evidence.py" checksums build/sbom --output
           build/sbom/sbom-checksums.json
       - name: Upload sbom-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sbom-${{ needs.version.outputs.prefix }}
           path: build/sbom/
@@ -312,7 +312,7 @@ jobs:
           echo "subjects=$(base64 -w0 slsa-subjects.txt)" >> "$GITHUB_OUTPUT"
         id: subjects
       - name: Upload evidence-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: evidence-${{ needs.version.outputs.prefix }}
           path: release-assets/
@@ -387,7 +387,7 @@ jobs:
           RELEASE_RUN_ID: ${{ needs.version.outputs.run_id }}
           RELEASE_RUN_ATTEMPT: ${{ needs.version.outputs.run_attempt }}
       - name: Upload verified-${{ needs.version.outputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: candidate-${{ needs.version.outputs.prefix }}
           path: release-assets/

@@ -102,7 +102,7 @@ jobs:
           OPERATION_RECEIPT: ${{ github.workspace }}/build/stage-operation.json
           METADATA_ONLY: ${{ inputs.metadata_commit != '' && 'true' || 'false' }}
       - name: Retain staged-${{ github.run_id }}-${{ github.run_attempt }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: staged-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/*.json
@@ -149,7 +149,7 @@ jobs:
           STAGED_SNAPSHOT: ${{ github.workspace }}/build/staged-snapshot.json
           OPERATION_RECEIPT: ${{ github.workspace }}/build/submission-receipt.json
       - name: Retain submission-${{ github.run_id }}-${{ github.run_attempt }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: submission-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/*.json
@@ -194,7 +194,7 @@ jobs:
         env:
           BUNDLE: ${{ steps.receipt.outputs.bundle-path }}
       - name: Retain signed-submission-${{ github.run_id }}-${{ github.run_attempt }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: signed-submission-${{ github.run_id }}-${{ github.run_attempt }}
           path: receipts/
