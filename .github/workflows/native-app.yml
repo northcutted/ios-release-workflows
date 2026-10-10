@@ -267,7 +267,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
-      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: ${{ inputs.app_root }}/build/native-release.zip
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -378,7 +378,7 @@ jobs:
         with:
           name: native-operation-${{ github.run_id }}-${{ github.run_attempt }}
           path: receipt/
-      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: receipt/operation.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
