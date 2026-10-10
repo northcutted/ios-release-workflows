@@ -45,7 +45,7 @@ jobs:
           binary = pathlib.Path('dist/ios-release')
           pathlib.Path('dist/SHA256SUMS').write_text(hashlib.sha256(binary.read_bytes()).hexdigest() + '  ios-release\n')
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ios-release-rust-${{ runner.os }}-${{ runner.arch }}
           path: rust/dist/
@@ -97,7 +97,7 @@ jobs:
         run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa localization
         env:
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: rust-picstrip-qa-${{ matrix.check }}
@@ -135,7 +135,7 @@ jobs:
           --output build/rust-qa --source "$SOURCE_SHA"
         env:
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rust-picstrip-qa-evidence
           path: build/rust-qa/
@@ -179,7 +179,7 @@ jobs:
         env:
           DEVICE: ${{ matrix.device }}
           SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: rust-picstrip-screenshots-${{ matrix.artifact }}

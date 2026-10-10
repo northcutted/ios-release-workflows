@@ -67,7 +67,7 @@ jobs:
         if: inputs.auto_init
         run: ios-release init --no-workflows
       - run: ios-release qa all
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: native-qa-${{ github.run_id }}-${{ github.run_attempt }}
@@ -140,7 +140,7 @@ jobs:
           IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
           IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
       - id: signing_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: native-signing-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/build/native-signing/signing.json
@@ -166,7 +166,7 @@ jobs:
       - run: ios-release signing apply --input build/native-signing/signing.json
       - run: ios-release qa all
       - id: qa_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: native-release-qa-${{ github.run_id }}-${{ github.run_attempt }}
@@ -194,7 +194,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - id: build_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: native-archive-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -226,7 +226,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - id: verify_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: native-archive-verified-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -270,7 +270,7 @@ jobs:
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-path: ${{ inputs.app_root }}/build/native-release.zip
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: native-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ inputs.app_root }}/build/native-release.zip
@@ -341,7 +341,7 @@ jobs:
           IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
           IOS_RELEASE_DEMO_PASSWORD: ${{ secrets.IOS_RELEASE_DEMO_PASSWORD }}
       - name: Retain interrupted and successful operation receipts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: native-operation-${{ github.run_id }}-${{ github.run_attempt }}
@@ -381,7 +381,7 @@ jobs:
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-path: receipt/operation.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: native-receipt-${{ inputs.release_run }}-${{ needs.select.outputs.preparation_attempt }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: receipt/operation.json

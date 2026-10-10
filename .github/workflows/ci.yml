@@ -49,7 +49,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source }}
       - name: Retain qa-lint-${{ inputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qa-lint-${{ inputs.prefix }}
           path: qa-results/
@@ -75,7 +75,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}
       - name: Retain qa-analyze-${{ inputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qa-analyze-${{ inputs.prefix }}
           path: qa-results/
@@ -101,7 +101,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}
       - name: Retain qa-test-${{ inputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qa-test-${{ inputs.prefix }}
           path: qa-results/
@@ -127,7 +127,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source }}
           TEST_WORKERS: ${{ inputs.test_workers }}
       - name: Retain qa-test-compatibility-${{ inputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qa-test-compatibility-${{ inputs.prefix }}
           path: qa-results/
@@ -174,7 +174,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source }}
       - name: Retain qa-evidence-${{ inputs.prefix }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qa-evidence-${{ inputs.prefix }}
           path: build/qa/

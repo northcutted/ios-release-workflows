@@ -30,7 +30,7 @@ jobs:
           rust/target/release/ios-release --app-root examples/OrbitNotes qa test
           rust/target/release/ios-release --app-root examples/OrbitNotes qa analyze
           rust/target/release/ios-release --app-root examples/OrbitNotes qa localization
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: native-onboarding-qa
@@ -77,7 +77,7 @@ jobs:
           --scheme OrbitNotes --test-target OrbitNotesUITests
           --only-testing OrbitNotesUITests/OnboardingTests/testStoreScreenshot
           --devices "$DEVICE" --languages en-US,ar-SA --isolated-cache
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: native-onboarding-screenshots-${{ matrix.artifact }}
