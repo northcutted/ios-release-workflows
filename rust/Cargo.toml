@@ -23,7 +23,7 @@ sha2 = "0.10"
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
-base64 = "0.22"
+base64 = "0.23"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 p256 = { version = "0.13", features = ["ecdsa", "pem"] }
 aes-gcm = "0.10"
