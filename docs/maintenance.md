@@ -1,5 +1,8 @@
 # Maintain the platform
 
+For the native Rust edit loop and repository map, start with [Contributing](../CONTRIBUTING.md).
+This page covers shared contracts, documentation tooling, and compatibility adapters.
+
 [Start here](../README.md) · [Setup](setup.md) · [Operations](operations.md) · [Architecture](architecture.md) · [Reference](reference.md) · [Maintenance](maintenance.md)
 
 ## Edit loop

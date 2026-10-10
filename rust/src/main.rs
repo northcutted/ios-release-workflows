@@ -9,20 +9,29 @@ use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
-    version,
-    about = "Native iOS signing, QA, TestFlight and App Store releases"
+    name = "ios-release",
+    version = cli_version(),
+    about = "Native iOS signing, QA, TestFlight and App Store releases",
+    after_help = "Start in your app folder:\n  ios-release init\n  ios-release qa all\n\nGuides: https://github.com/northcutted/ios-release-workflows/blob/main/docs/README.md"
 )]
 struct Cli {
-    #[arg(long, global = true, env = "IOS_APP_ROOT", default_value = ".")]
+    #[arg(
+        long,
+        global = true,
+        env = "IOS_APP_ROOT",
+        default_value = ".",
+        help = "App folder containing the Xcode project and configuration"
+    )]
     app_root: PathBuf,
     #[arg(
         long,
         global = true,
         env = "IOS_RELEASE_CONFIG",
-        default_value = ".github/ios-release.json"
+        default_value = ".github/ios-release.json",
+        help = "App configuration; falls back to .ios-release.json if the default is absent"
     )]
     config: PathBuf,
-    #[arg(long)]
+    #[arg(long, help = "Print the native command summary as JSON")]
     commands_json: bool,
     #[arg(
         long,
@@ -36,10 +45,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Configure protected GitHub Actions or retrieve a verified preparation
     Github {
         #[command(subcommand)]
         action: Github,
     },
+    /// Discover an Xcode app and create configuration, store content, and Actions
     Init {
         #[arg(long)]
         project: Option<String>,
@@ -53,7 +64,10 @@ enum Commands {
         repository: Option<String>,
         #[arg(long)]
         xcode: Option<String>,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Create local app configuration without an Actions workflow"
+        )]
         no_workflows: bool,
         #[arg(long,action=clap::ArgAction::Set)]
         tracking: Option<bool>,
@@ -64,29 +78,36 @@ enum Commands {
         #[arg(long,default_value=env!("IOS_RELEASE_BUILD_REVISION"))]
         platform_revision: String,
     },
+    /// Store or inspect your private App Store Connect team API credentials
     Auth {
         #[command(subcommand)]
         action: Auth,
     },
+    /// Manage distribution certificates, profiles, and the encrypted signing vault
     Signing {
         #[command(subcommand)]
         action: Signing,
     },
+    /// Prepare a tested, signed release with an exact IPA identity
     Release {
         #[command(subcommand)]
         action: Release,
     },
+    /// Validate content, deliver a release, or manage its App Store state
     Store {
         #[command(subcommand)]
         action: Store,
         #[arg(long, global = true, default_value = "build/native-release")]
         release: PathBuf,
     },
+    /// Read production and TestFlight status for the configured app
     Status,
+    /// Show CLI/source identity and runtime requirements; optionally check Xcode
     Doctor {
         #[arg(long)]
         xcode: bool,
     },
+    /// Validate configured Xcode and resolve exact simulator destinations
     Toolchain {
         #[arg(long)]
         compatibility: bool,
@@ -95,23 +116,28 @@ enum Commands {
         #[arg(long)]
         destinations_json: bool,
     },
+    /// Run configured tests, analysis, localization, and optional lint
     Qa {
         #[arg(value_parser = ["all", "lint", "localization", "analyze", "test", "test-compatibility"])]
         check: String,
     },
+    /// Run the configured unit test targets (alias for qa test)
     Test,
+    /// Reconcile exported XCTest summary and test cases into validated evidence
     XcresultReport {
         #[arg(long)]
         summary: PathBuf,
         #[arg(long)]
         tests: PathBuf,
     },
+    /// Archive and export with installed signing assets, without delivery
     Archive {
         #[arg(long, env = "VERSION")]
         version: String,
         #[arg(long, env = "BUILD_NUMBER")]
         build_number: String,
     },
+    /// Capture app-owned UI-test scenarios for configured devices and locales
     #[command(alias = "screenshots-capture")]
     Screenshots {
         #[arg(long)]
@@ -140,6 +166,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum Auth {
+    /// Save a team API key privately outside the app repository
     Login {
         #[arg(long)]
         key_id: String,
@@ -148,33 +175,41 @@ enum Auth {
         #[arg(long)]
         key_file: PathBuf,
     },
+    /// Inspect the stored key's public identity
     Status,
 }
 #[derive(Subcommand)]
 enum Signing {
+    /// Export a public signing-input snapshot for separated Actions jobs
     Export {
         #[arg(long, default_value = "build/native-signing/signing.json")]
         output: PathBuf,
     },
+    /// Apply a signing-input snapshot to the archive configuration
     Apply {
         #[arg(long)]
         input: PathBuf,
     },
+    /// Import an existing distribution identity from a password-protected P12
     Import {
         #[arg(long)]
         p12: PathBuf,
         #[arg(long, default_value = "IOS_RELEASE_P12_PASSWORD")]
         password_env: String,
     },
+    /// Reconcile distribution certificates/profiles and update archive signing
     Sync {
         #[arg(long)]
         no_project_changes: bool,
     },
+    /// Inspect vault assets and renewal state
     Status,
+    /// Configure manual signing for the archive configuration
     ConfigureProject,
 }
 #[derive(Subcommand)]
 enum Release {
+    /// Build and export a signed archive (advanced preparation step)
     Build {
         #[arg(long)]
         version: String,
@@ -183,18 +218,21 @@ enum Release {
         #[arg(long)]
         installed_signing: bool,
     },
+    /// Independently verify an exported IPA and matching symbols
     VerifyArchive {
         #[arg(long)]
         version: String,
         #[arg(long)]
         build_number: String,
     },
+    /// Package an existing preparation directory
     Pack {
         #[arg(long, default_value = "build/native-release")]
         release: PathBuf,
         #[arg(long, default_value = "build/native-release.zip")]
         output: PathBuf,
     },
+    /// Run configured QA, build a signed IPA, and seal a local release
     Prepare {
         #[arg(long, default_value = "1.0.0")]
         version: String,
@@ -203,6 +241,7 @@ enum Release {
         #[arg(long)]
         installed_signing: bool,
     },
+    /// Seal existing QA/archive evidence (advanced preparation step)
     Seal {
         #[arg(long)]
         version: String,
@@ -211,34 +250,46 @@ enum Release {
         #[arg(long, default_value = "build/native-release")]
         output: PathBuf,
     },
+    /// Find the next build number from Apple state
     NextBuildNumber,
 }
 #[derive(Subcommand)]
 enum Store {
+    /// List or create an app-owned TestFlight group and save its ID
     BetaGroups {
         #[arg(long)]
         create: Option<String>,
         #[arg(long, requires = "create")]
         external: bool,
     },
+    /// Check local metadata and screenshots before Apple writes
     Validate,
+    /// Release an approved version awaiting manual release
     Publish {
         #[arg(long)]
         confirm: bool,
     },
+    /// Set a phased release to ACTIVE, PAUSED, or COMPLETE
     Phased {
         #[arg(value_parser=["ACTIVE","PAUSED","COMPLETE"])]
         state: String,
     },
+    /// Read the selected app/release state
     Status,
+    /// Upload the preparation's exact IPA and retain its recovery receipt
     Upload,
+    /// Wait for the uploaded build to finish Apple processing
     Wait {
         #[arg(long, default_value_t = 3600)]
         timeout: u64,
     },
+    /// Assign the processed build to configured beta groups
     Testflight,
+    /// Select the processed build and apply store content
     Stage,
+    /// Apply metadata and screenshots to the selected store version
     Metadata,
+    /// Request App Review for the selected version
     Submit {
         #[arg(long)]
         confirm: bool,
@@ -246,10 +297,12 @@ enum Store {
 }
 #[derive(Subcommand)]
 enum Github {
+    /// Verify repository protections for native release operations
     Controls {
         #[arg(long, default_value = "xcode-27")]
         runner: String,
     },
+    /// Authenticate and download an exact Actions preparation and receipts
     Fetch {
         #[arg(long)]
         run: u64,
@@ -258,10 +311,20 @@ enum Github {
         #[arg(long)]
         github_output: bool,
     },
+    /// Configure native environments, secrets, and production approval
     Setup {
         #[arg(long)]
         reviewer: Option<String>,
     },
+}
+
+fn cli_version() -> &'static str {
+    let distribution = env!("IOS_RELEASE_DISTRIBUTION_VERSION");
+    if distribution.is_empty() {
+        env!("CARGO_PKG_VERSION")
+    } else {
+        distribution
+    }
 }
 
 fn main() {
@@ -370,7 +433,7 @@ fn run(cli: Cli) -> Result<i32> {
     if matches!(command, Commands::Doctor { xcode: false }) {
         println!(
             "{}",
-            json!({"implementation":"rust","version":env!("CARGO_PKG_VERSION"),"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"runtime_dependencies":[],"native_builds_require":"macOS and the configured Xcode","legacy_workflows":"unchanged"})
+            json!({"implementation":"rust","version":cli_version(),"cargo_version":env!("CARGO_PKG_VERSION"),"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"runtime_dependencies":[],"native_builds_require":"macOS and the configured Xcode","legacy_workflows":"unchanged"})
         );
         return Ok(0);
     }

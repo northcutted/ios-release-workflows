@@ -1,5 +1,5 @@
 name: Native iOS release CLI
-description: Build the standalone CLI from this action's immutable platform source
+description: Install a verified native package or build the standalone CLI from an immutable source pin
 inputs:
   revision:
     description: Full platform commit used by the caller

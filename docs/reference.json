@@ -28,28 +28,31 @@
     "output_dir": "docs",
     "pages": [
       "README.md",
-      "docs"
+      "CONTRIBUTING.md",
+      "CHANGELOG.md",
+      "docs",
+      "examples/OrbitNotes/README.md"
     ],
     "navigation": [
       {
-        "label": "Native CLI quickstart",
+        "label": "Documentation",
+        "path": "docs/README.md"
+      },
+      {
+        "label": "Native quickstart",
         "path": "docs/native-quickstart.md"
       },
       {
-        "label": "Start here",
-        "path": "README.md"
+        "label": "Native commands",
+        "path": "docs/native-commands.md"
       },
       {
-        "label": "Operations",
-        "path": "docs/operations.md"
+        "label": "Compatibility setup",
+        "path": "docs/setup.md"
       },
       {
-        "label": "Architecture",
-        "path": "docs/architecture.md"
-      },
-      {
-        "label": "Maintenance",
-        "path": "docs/maintenance.md"
+        "label": "Contributing",
+        "path": "CONTRIBUTING.md"
       }
     ]
   },

@@ -1,5 +1,8 @@
 # Adopt the platform
 
+This guide covers the existing Python/Ruby compatibility platform. For the native
+Rust CLI, start with the [native quickstart](native-quickstart.md) or [documentation index](README.md).
+
 [Start here](../README.md) · [Setup](setup.md) · [Operations](operations.md) · [Architecture](architecture.md) · [Reference](reference.md) · [Maintenance](maintenance.md)
 
 ## Support
