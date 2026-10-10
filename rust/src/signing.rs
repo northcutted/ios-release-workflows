@@ -338,9 +338,8 @@ pub fn sync_with_password(
                 name.to_owned()
             } else {
                 use sha2::Digest;
-                let digest = format!(
-                    "{:x}",
-                    sha2::Sha256::digest(serde_json::to_vec(&target["entitlements"])?)
+                let digest = fsutil::hex(
+                    sha2::Sha256::digest(serde_json::to_vec(&target["entitlements"])?).as_ref(),
                 );
                 // Stable, certificate-bound names let fresh CI runs reconcile renewals
                 // from the same encrypted private key without creating a profile per run.

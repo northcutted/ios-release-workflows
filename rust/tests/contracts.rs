@@ -15,6 +15,27 @@ use std::{
 
 const ID: &str = "C71FB2C5-952C-4E6D-A2AD-1ADAE3B28FA1";
 const RUNTIME: &str = "com.apple.CoreSimulator.SimRuntime.iOS-27-0";
+
+#[test]
+fn sha256_checksums_preserve_known_vectors_and_leading_zeroes() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("input");
+    for (bytes, expected) in [
+        (
+            b"".as_slice(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            b"abc".as_slice(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+    ] {
+        fs::write(&file, bytes).unwrap();
+        assert_eq!(fsutil::sha256(&file).unwrap(), expected);
+    }
+    assert_eq!(fsutil::hex(&[0, 1, 15, 16, 171, 255]), "00010f10abff");
+}
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

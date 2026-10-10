@@ -56,5 +56,5 @@ pub fn fingerprint(root: &Path) -> Result<String> {
         hash.update(name.as_bytes());
         hash.update(fsutil::sha256(&path)?.as_bytes());
     }
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(fsutil::hex(hash.finalize().as_ref()))
 }

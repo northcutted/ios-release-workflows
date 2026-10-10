@@ -90,7 +90,8 @@ pub fn apply_for_source(app: &App, input: &Path, source: &str) -> Result<()> {
         ensure!(bytes.len() < 16 * 1024 * 1024, "Signing file too large");
         use sha2::Digest;
         ensure!(
-            format!("{:x}", sha2::Sha256::digest(&bytes)) == entry["sha256"].as_str().unwrap_or(""),
+            fsutil::hex(sha2::Sha256::digest(&bytes).as_ref())
+                == entry["sha256"].as_str().unwrap_or(""),
             "Signing transfer checksum differs"
         );
         files.push((path, bytes));

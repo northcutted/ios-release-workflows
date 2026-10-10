@@ -44,7 +44,18 @@ pub fn sha256(path: &Path) -> Result<String> {
         }
         digest.update(&buffer[..n]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(hex(digest.finalize().as_ref()))
+}
+
+/// Keep persisted checksums independent of a digest library's formatting traits.
+pub fn hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(DIGITS[(byte >> 4) as usize] as char);
+        output.push(DIGITS[(byte & 15) as usize] as char);
+    }
+    output
 }
 
 pub fn confined(root: &Path, path: &Path) -> Result<()> {
