@@ -69,6 +69,8 @@ jobs:
           file = pathlib.Path('examples/OrbitNotes/.ios-release.json')
           config = json.loads(file.read_text())
           config.update(screens=['01-notes'], locales=['en-US', 'ar-SA'], screenshot_devices=[os.environ['DEVICE']])
+          # These fixture devices belong to the explicitly tested 27.0 runtime.
+          config['xcode']['runtime'] = '27.0'
           file.write_text(json.dumps(config))
           PY
       - name: Capture English and Arabic with the native helper

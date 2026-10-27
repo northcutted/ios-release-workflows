@@ -212,6 +212,7 @@ jobs:
           cargo build --locked --release
       - name: Validate every locale and compare the deployed version decision
         run: |
+          export GITHUB_REPOSITORY=northcutted/picstrip
           mkdir -p consumer/build/native-readiness
           platform/rust/target/release/ios-release --app-root consumer store validate > consumer/build/native-readiness/store.json
           platform/rust/target/release/ios-release --app-root consumer version --output build/native-readiness/version.json
@@ -224,7 +225,6 @@ jobs:
           print('Native and deployed version decisions match, including release notes.')
           PY
         env:
-          GITHUB_REPOSITORY: northcutted/picstrip
           SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
           TZ: UTC
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
