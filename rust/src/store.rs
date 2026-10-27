@@ -153,7 +153,8 @@ impl Release {
         let manifest: Value =
             serde_json::from_slice(&std::fs::read(directory.join("release.json"))?)?;
         ensure!(
-            manifest["schema_version"] == 2 && manifest["verified"] == true,
+            matches!(manifest["schema_version"].as_u64(), Some(2 | 3))
+                && manifest["verified"] == true,
             "Release has not passed native preparation"
         );
         ensure!(
@@ -181,8 +182,16 @@ impl Release {
                 "Release {file} changed"
             );
         }
+        crate::content::verify(&directory, &manifest)?;
         let archived: Value =
             serde_json::from_slice(&std::fs::read(directory.join("archive.json"))?)?;
+        if manifest["schema_version"] == 3 {
+            ensure!(
+                archived["symbols_sha256"].as_str()
+                    == Some(&fsutil::sha256(&directory.join("symbols.zip"))?),
+                "Release symbols differ from archive verification"
+            );
+        }
         let qa: Value = serde_json::from_slice(&std::fs::read(directory.join("qa.json"))?)?;
         let sealed_app = App::load(&directory, Path::new("app.json"))?;
         crate::release::validate_inventory(&sealed_app, &archived)?;
@@ -484,6 +493,43 @@ fn state(version: &Value) -> Result<&str> {
         .as_str()
         .or(version["attributes"]["appStoreState"].as_str())
         .context("Missing App Store version state")
+}
+/// Reauthenticate the app, marketing version, upload bytes and selected build before editing content.
+pub fn editable_stage(app: &App, release: &mut Release, api: &mut impl Api) -> Result<String> {
+    let recorded = release.receipt["version_id"]
+        .as_str()
+        .context("Run store stage before updating metadata")?
+        .to_owned();
+    let version = version_record(app, release, api)?.context("Staged App Store version missing")?;
+    ensure!(
+        api::id(&version)? == recorded
+            && version["attributes"]["versionString"] == release.manifest["version"]
+            && version["attributes"]["platform"] == "IOS",
+        "Staged version identity changed"
+    );
+    ensure!(
+        [
+            "PREPARE_FOR_SUBMISSION",
+            "READY_FOR_REVIEW",
+            "DEVELOPER_REJECTED",
+            "REJECTED",
+            "METADATA_REJECTED"
+        ]
+        .contains(&state(&version)?),
+        "Staged version is not editable"
+    );
+    let build = processed(app, release, api)?.context("Staged build is not ready")?;
+    let selected = api.request(
+        "GET",
+        &format!("/v1/appStoreVersions/{recorded}/build"),
+        &[],
+        None,
+    )?;
+    ensure!(
+        selected["data"]["id"] == build["id"],
+        "Selected build differs from the release receipt"
+    );
+    Ok(recorded)
 }
 pub fn stage(app: &App, release: &mut Release, api: &mut impl Api) -> Result<String> {
     let build =

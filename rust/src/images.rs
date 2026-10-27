@@ -43,3 +43,21 @@ pub fn store_png(input: &[u8]) -> Result<Vec<u8>> {
     }
     Ok(output)
 }
+
+/// Decode fully to catch damaged pixels without recompressing every store asset.
+pub fn validate_store_png(input: &[u8]) -> Result<()> {
+    let mut decoder = png::Decoder::new(Cursor::new(input));
+    decoder.set_limits(png::Limits {
+        bytes: 128 * 1024 * 1024,
+    });
+    let mut reader = decoder.read_info()?;
+    let size = reader.output_buffer_size().context("PNG is too large")?;
+    ensure!(size <= 128 * 1024 * 1024, "PNG is too large");
+    let mut buffer = vec![0; size];
+    let info = reader.next_frame(&mut buffer)?;
+    ensure!(
+        info.bit_depth == png::BitDepth::Eight && info.color_type == png::ColorType::Rgb,
+        "Store screenshot must be an opaque eight-bit RGB PNG"
+    );
+    Ok(())
+}

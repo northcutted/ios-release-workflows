@@ -125,6 +125,7 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
                 .status;
             return Ok(());
         }
+        remove(&app.root.join("build/build-env.json"))?;
         let selected = toolchain::resolve(
             app,
             name == "test-compatibility",
@@ -200,6 +201,19 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
         }
         Ok(())
     })();
+    if ["test", "test-compatibility", "analyze"].contains(&name) {
+        let diagnostics = app
+            .root
+            .join("build/toolchain")
+            .join(if name == "test-compatibility" {
+                "compatibility.json"
+            } else {
+                "primary.json"
+            });
+        if diagnostics.is_file() {
+            fsutil::atomic(&directory.join("toolchain.json"), &fs::read(diagnostics)?)?;
+        }
+    }
     if let Err(error) = outcome {
         if status == 0 {
             status = 1;

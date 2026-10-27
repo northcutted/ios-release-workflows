@@ -465,32 +465,11 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
         !output.exists(),
         "Release directory already exists; resume its saved receipt instead"
     );
-    let mut archive = zip::ZipArchive::new(fs::File::open(&package)?)?;
-    let allowed = [
-        "application.ipa",
-        "app.json",
-        "qa.json",
-        "archive.json",
-        "release.json",
-    ];
-    ensure!(
-        archive.len() == allowed.len(),
-        "Release package contains unexpected files"
-    );
     fs::create_dir_all(output.parent().context("Output needs a parent")?)?;
     let stage = tempfile::tempdir_in(output.parent().unwrap())?;
-    for name in allowed {
-        let mut entry = archive.by_name(name)?;
-        ensure!(
-            !entry.is_symlink() && entry.size() < 4 * 1024 * 1024 * 1024,
-            "Unsafe release file"
-        );
-        let path = stage.path().join(name);
-        let mut file = fs::File::create(path)?;
-        std::io::copy(&mut entry, &mut file)?;
-        file.sync_all()?;
-    }
-    let mut release = crate::store::Release::load(app, stage.path())?;
+    let extracted = stage.path().join("release");
+    crate::content::unpack(app, &package, &extracted)?;
+    let mut release = crate::store::Release::load(app, &extracted)?;
     ensure!(
         release.manifest["source_sha"] == source
             && release.manifest["run_id"]
@@ -508,7 +487,7 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
     restore_receipt(app, run, attempt, &mut release, executor)?;
     let manifest = release.manifest.clone();
     drop(release);
-    fs::rename(stage.path(), output)?;
+    fs::rename(&extracted, output)?;
     println!("Authenticated preparation {run} at {}", output.display());
     Ok(manifest)
 }

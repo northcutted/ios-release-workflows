@@ -36,6 +36,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Select the release version and notes from the app's Conventional Commit policy.
+    Version {
+        #[arg(long)]
+        requested: Option<String>,
+        #[arg(long, default_value = "build/version/semantic-release.json")]
+        output: PathBuf,
+        #[arg(long)]
+        github_output: bool,
+    },
     Github {
         #[command(subcommand)]
         action: Github,
@@ -211,7 +220,11 @@ enum Release {
         #[arg(long, default_value = "build/native-release")]
         output: PathBuf,
     },
-    NextBuildNumber,
+    NextBuildNumber {
+        /// Use the monotonic Actions run number plus build_number_offset; reject collisions.
+        #[arg(long)]
+        github_run: bool,
+    },
 }
 #[derive(Subcommand)]
 enum Store {
@@ -280,6 +293,7 @@ fn run(cli: Cli) -> Result<i32> {
             "{}",
             serde_json::to_string_pretty(
                 &json!({"schema_version":1,"implementation":"rust","experimental":true,"commands":{
+                    "version":{"description":"Select version and release notes from the app-owned Conventional Commit policy"},
                     "doctor":{"description":"Inspect native runtime requirements and optional configured Xcode"},
                     "toolchain":{"description":"Validate Xcode and resolve exact simulators"},
                     "qa":{"description":"Run lint, localization, analysis or configured tests; retain QA evidence"},
@@ -387,6 +401,27 @@ fn run(cli: Cli) -> Result<i32> {
     let mut app = App::load(&cli.app_root, &cli.config)?;
     let mut executor = Native;
     match command {
+        Commands::Version {
+            requested,
+            output,
+            github_output,
+        } => {
+            let value =
+                ios_release_native::version::analyze(&app, requested.as_deref(), &mut executor)?;
+            if !cli.plan {
+                let github_path = if github_output {
+                    Some(PathBuf::from(
+                        std::env::var("GITHUB_OUTPUT").context("GITHUB_OUTPUT is required")?,
+                    ))
+                } else {
+                    None
+                };
+                let output = app.root.join(output);
+                fsutil::confined(&app.root, &output)?;
+                ios_release_native::version::write_output(&value, &output, github_path.as_deref())?;
+            }
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        }
         Commands::Github { action } => match action {
             Github::Controls { runner } => {
                 if cli.plan {
@@ -508,8 +543,19 @@ fn run(cli: Cli) -> Result<i32> {
                         )?)?
                     );
                 }
-                Release::NextBuildNumber => {
-                    println!("{}", store::next_number(&app, &mut Apple::new()?)?)
+                Release::NextBuildNumber { github_run } => {
+                    let minimum = store::next_number(&app, &mut Apple::new()?)?;
+                    let number = if github_run {
+                        ios_release_native::version::github_number(
+                            &app.config,
+                            &minimum,
+                            &std::env::var("GITHUB_RUN_NUMBER")?,
+                            &std::env::var("GITHUB_RUN_ATTEMPT")?,
+                        )?
+                    } else {
+                        minimum
+                    };
+                    println!("{number}")
                 }
                 Release::Build {
                     version,

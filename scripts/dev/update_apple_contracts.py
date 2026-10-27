@@ -27,7 +27,7 @@ def dereference(value):
 
 normalize = lambda path: re.sub(r"\{[^}]*\}", "{}", path)
 used = set()
-for module in ["api", "signing", "store", "metadata"]:
+for module in ["api", "signing", "store", "metadata", "accessibility"]:
     text = (root / f"rust/src/{module}.rs").read_text()
     used.update(normalize(p) for p in re.findall(r'"(/v1/[^"?]+)', text))
 

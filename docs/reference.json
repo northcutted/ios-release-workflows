@@ -11,6 +11,7 @@
     ".github/workflows/native-app.yml",
     ".github/workflows/native-binaries.yml",
     ".github/workflows/native-caller.yml",
+    ".github/workflows/native-readiness.yml",
     ".github/workflows/observe.yml",
     ".github/workflows/platform-tests.yml",
     ".github/workflows/prepare.yml",
@@ -459,7 +460,7 @@
         },
         "version": {
           "type": "string",
-          "default": "1.0.0"
+          "default": ""
         },
         "build_number": {
           "type": "string",
@@ -764,6 +765,103 @@
             "attestations": "write",
             "artifact-metadata": "write"
           },
+          "secret_names": []
+        }
+      ]
+    },
+    {
+      "file": ".github/workflows/native-readiness.yml",
+      "name": "Native migration rehearsal",
+      "triggers": {
+        "workflow_call": {}
+      },
+      "inputs": {
+        "platform_revision": {
+          "type": "string",
+          "required": true
+        },
+        "config": {
+          "type": "string",
+          "default": ".github/ios-release.json"
+        },
+        "runner": {
+          "type": "string",
+          "default": "xcode-27"
+        },
+        "screenshot_devices": {
+          "type": "string",
+          "required": true
+        },
+        "screenshot_scheme": {
+          "type": "string",
+          "required": true
+        },
+        "screenshot_target": {
+          "type": "string",
+          "required": true
+        },
+        "screenshot_test": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "secret_names": [],
+      "outputs": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": null,
+      "jobs": [
+        {
+          "id": "inputs",
+          "name": "Native store inputs and version policy",
+          "needs": [],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "qa",
+          "name": "Native QA (${{ matrix.check }})",
+          "needs": [],
+          "condition": null,
+          "runner": "${{ matrix.check == 'test-compatibility' && 'macos-26' || inputs.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 90,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "screenshots",
+          "name": "Native screenshots (${{ matrix.device }})",
+          "needs": [],
+          "condition": null,
+          "runner": "${{ inputs.runner }}",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 90,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "gate",
+          "name": "Native rehearsal gate",
+          "needs": [
+            "inputs",
+            "qa",
+            "screenshots"
+          ],
+          "condition": "always()",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 5,
+          "permissions": null,
           "secret_names": []
         }
       ]
@@ -1357,6 +1455,18 @@
           "uses": null,
           "environment": null,
           "timeout_minutes": 90,
+          "permissions": null,
+          "secret_names": []
+        },
+        {
+          "id": "store-inputs",
+          "name": "Current PicStrip store and version parity",
+          "needs": [],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
           "permissions": null,
           "secret_names": []
         }

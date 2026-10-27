@@ -143,10 +143,8 @@ fn metadata_preflight_rejects_placeholders_bad_urls_and_missing_locales() {
     )
     .unwrap();
     assert!(metadata::preflight(&app).is_err());
-    let mut candidate = candidate(&app);
-    let mut server = AppleFixture::default();
-    assert!(metadata::sync(&app, &mut candidate, &mut server).is_err());
-    assert!(server.calls.is_empty());
+    qa(&app);
+    assert!(metadata::preflight(&app).is_err());
 }
 #[test]
 fn sealed_release_requires_a_complete_verified_bundle_inventory() {
@@ -159,14 +157,21 @@ fn sealed_release_requires_a_complete_verified_bundle_inventory() {
     assert!(release::validate_inventory(&app, &archive).is_err());
 }
 #[test]
-fn release_package_contains_only_the_five_verified_public_inputs() {
+fn release_package_contains_only_manifested_public_inputs() {
     let (_root, app) = app();
     let release = candidate(&app);
     fsutil::atomic(&release.directory.join("private.p8"), b"private key").unwrap();
     let package = app.root.join("build/native-release.zip");
     release::pack(&app, &release.directory, &package).unwrap();
     let zip = zip::ZipArchive::new(fs::File::open(package).unwrap()).unwrap();
-    assert_eq!(zip.len(), 5);
+    assert_eq!(
+        zip.len(),
+        release.manifest["files"].as_object().unwrap().len() + 1
+    );
+    assert!(
+        zip.file_names()
+            .any(|n| n == "store/metadata/en-US/name.txt")
+    );
     assert!(
         !zip.file_names()
             .any(|n| n == "operation.json" || n == "private.p8")
@@ -221,13 +226,26 @@ fn qa(app: &App) {
     fsutil::json(&folder.join("result.json"),&json!({"check":"test","status":0,"inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()})).unwrap();
 }
 fn candidate(app: &App) -> store::Release {
+    if !app
+        .path("metadata_path")
+        .unwrap()
+        .join("en-US/name.txt")
+        .exists()
+    {
+        local_metadata(app, "en-US");
+    }
     qa(app);
     fsutil::atomic(
         &app.root.join("build/application.ipa"),
         b"fixture IPA bytes",
     )
     .unwrap();
-    fsutil::json(&app.root.join("build/rust-archive.json"),&json!({"version":"1.2.3","build_number":"7","inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"ipa_sha256":fsutil::sha256(&app.root.join("build/application.ipa")).unwrap(),"applications":[{"bundle_id":app.config["app_store"]["bundle_id"],"version":"1.2.3","build_number":"7","profile_uuid":"11111111-1111-1111-1111-111111111111","profile_sha256":"a".repeat(64),"certificate_sha256":"b".repeat(64),"executable_sha256":"c".repeat(64),"binary_uuids":["UUID (arm64)"]}]})).unwrap();
+    fsutil::atomic(
+        &app.root.join("build/symbols.zip"),
+        b"verified fixture symbols",
+    )
+    .unwrap();
+    fsutil::json(&app.root.join("build/rust-archive.json"),&json!({"version":"1.2.3","build_number":"7","inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"ipa_sha256":fsutil::sha256(&app.root.join("build/application.ipa")).unwrap(),"symbols_sha256":fsutil::sha256(&app.root.join("build/symbols.zip")).unwrap(),"applications":[{"bundle_id":app.config["app_store"]["bundle_id"],"version":"1.2.3","build_number":"7","profile_uuid":"11111111-1111-1111-1111-111111111111","profile_sha256":"a".repeat(64),"certificate_sha256":"b".repeat(64),"executable_sha256":"c".repeat(64),"binary_uuids":["UUID (arm64)"]}]})).unwrap();
     release::seal(app, "1.2.3", "7", &app.root.join("build/native-release")).unwrap();
     store::Release::load(app, &app.root.join("build/native-release")).unwrap()
 }
@@ -532,6 +550,7 @@ struct MetadataFixture {
     posts: usize,
     patches: usize,
     mismatch: bool,
+    apple: AppleFixture,
 }
 impl Api for MetadataFixture {
     fn request(
@@ -552,10 +571,20 @@ impl Api for MetadataFixture {
                 json!({"data":[{"id":"info","attributes":{"state":"PREPARE_FOR_SUBMISSION"}}]}),
             );
         }
+        if path == "/v1/apps/app/appStoreVersions"
+            || path.contains("buildUploads")
+            || path.starts_with("/v1/builds/")
+            || path.ends_with("/build")
+        {
+            return self.apple.request(method, path, query, body);
+        }
         if method == "POST" {
             self.posts += 1;
             let mut value = body.unwrap()["data"].clone();
             value["id"] = json!(format!("resource-{}", self.posts));
+            if value["type"] == "accessibilityDeclarations" {
+                value["attributes"]["state"] = json!("DRAFT");
+            }
             let route = format!(
                 "/v1/{}/{}",
                 value["type"].as_str().unwrap(),
@@ -587,6 +616,7 @@ impl Api for MetadataFixture {
         for kind in [
             "appStoreVersionLocalizations",
             "appInfoLocalizations",
+            "accessibilityDeclarations",
             "betaGroups",
         ] {
             if path.ends_with(kind) {
@@ -601,6 +631,14 @@ impl Api for MetadataFixture {
         bail!("No screenshot assets in this fixture")
     }
 }
+impl MetadataFixture {
+    fn staged(app: &App, release: &mut store::Release) -> Self {
+        let mut server = Self::default();
+        server.apple.complete(release);
+        store::stage(app, release, &mut server.apple).unwrap();
+        server
+    }
+}
 #[test]
 fn locale_and_review_metadata_use_current_apple_contracts_and_readback() {
     let (_root, app) = app();
@@ -610,7 +648,7 @@ fn locale_and_review_metadata_use_current_apple_contracts_and_readback() {
     candidate
         .checkpoint(json!({"version_id":"version"}))
         .unwrap();
-    let mut server = MetadataFixture::default();
+    let mut server = MetadataFixture::staged(&app, &mut candidate);
     metadata::sync(&app, &mut candidate, &mut server).unwrap();
     assert_eq!(server.posts, 3);
     metadata::sync(&app, &mut candidate, &mut server).unwrap();
@@ -941,4 +979,321 @@ fn testflight_assignment_is_app_scoped_and_idempotent() {
         api.count("POST", "/v1/betaGroups/beta/relationships/builds"),
         1
     );
+}
+
+#[test]
+fn release_content_survives_checkout_changes_and_rejects_tampering() {
+    let (_root, app) = app();
+    let mut candidate = candidate(&app);
+    candidate
+        .checkpoint(json!({"version_id":"version"}))
+        .unwrap();
+    fsutil::atomic(
+        &app.path("metadata_path").unwrap().join("en-US/name.txt"),
+        b"Different checkout",
+    )
+    .unwrap();
+    let mut server = MetadataFixture::staged(&app, &mut candidate);
+    metadata::sync(&app, &mut candidate, &mut server).unwrap();
+    assert!(
+        server
+            .resources
+            .values()
+            .any(|v| v["attributes"]["name"] == "Orbit Notes")
+    );
+    fsutil::atomic(
+        &candidate.directory.join("store/metadata/en-US/name.txt"),
+        b"Tampered release",
+    )
+    .unwrap();
+    assert!(store::Release::load(&app, &candidate.directory).is_err());
+    let mut untouched = MetadataFixture::default();
+    assert!(metadata::sync(&app, &mut candidate, &mut untouched).is_err());
+    assert_eq!(untouched.posts, 0);
+}
+
+#[test]
+fn package_roundtrips_content_and_rejects_unmanifested_or_duplicate_files() {
+    use std::io::Write;
+    let (_root, app) = app();
+    let candidate = candidate(&app);
+    let package = app.root.join("build/native-release.zip");
+    release::pack(&app, &candidate.directory, &package).unwrap();
+    let restored = app.root.join("build/restored");
+    ios_release_native::content::unpack(&app, &package, &restored).unwrap();
+    assert_eq!(
+        fs::read(restored.join("store/metadata/en-US/name.txt")).unwrap(),
+        b"Orbit Notes"
+    );
+    let original = fs::read(&package).unwrap();
+    for name in ["../escape", "private.p8", "store/metadata/en-US/name.txt"] {
+        fs::write(&package, &original).unwrap();
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&package)
+            .unwrap();
+        let mut writer = zip::ZipWriter::new_append(file).unwrap();
+        if writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .is_ok()
+        {
+            writer.write_all(b"not authorized").unwrap();
+            writer.finish().unwrap();
+            let output = app.root.join("build/rejected");
+            assert!(ios_release_native::content::unpack(&app, &package, &output).is_err());
+            assert!(!output.exists());
+        }
+    }
+}
+
+#[test]
+fn store_inventory_requires_configured_locales_and_captures() {
+    let (_root, mut app) = app();
+    local_metadata(&app, "en-US");
+    app.config["locales"] = json!(["en-US", "ar-SA"]);
+    assert!(metadata::preflight(&app).is_err());
+    local_metadata(&app, "ar-SA");
+    assert!(metadata::preflight(&app).is_ok());
+    app.config["screens"] = json!(["01_Home"]);
+    assert!(metadata::preflight(&app).is_err());
+    app.config["screens"] = json!([]);
+    let image = app
+        .path("screenshots_path")
+        .unwrap()
+        .join("en-US/image.png");
+    fsutil::atomic(
+        &image,
+        b"version https://git-lfs.github.com/spec/v1\noid sha256:placeholder\n",
+    )
+    .unwrap();
+    assert!(metadata::preflight(&app).is_err());
+}
+
+#[test]
+fn legacy_review_contacts_are_imported_without_packaging_a_password() {
+    let (_root, app) = app();
+    local_metadata(&app, "en-US");
+    let folder = app
+        .path("metadata_path")
+        .unwrap()
+        .join("review_information");
+    for (name, value) in [
+        ("first_name.txt", "App"),
+        ("last_name.txt", "Owner"),
+        ("phone_number.txt", "+1 555 0100"),
+        ("email_address.txt", "owner@example.com"),
+        ("notes.txt", "No login required."),
+    ] {
+        fsutil::atomic(&folder.join(name), value.as_bytes()).unwrap();
+    }
+    let candidate = candidate(&app);
+    assert!(candidate.directory.join("store/review.json").is_file());
+    fsutil::atomic(&folder.join("demo_password.txt"), b"never bundle this").unwrap();
+    assert!(metadata::preflight(&app).is_err());
+}
+
+#[test]
+fn accessibility_sync_honors_apple_contracts_and_never_changes_published_claims() {
+    use ios_release_native::accessibility;
+    let (_root, mut app) = app();
+    app.config["accessibility_path"] = json!("store/accessibility.json");
+    let mut declaration = json!({"deviceFamily":"IPHONE"});
+    for key in accessibility::FEATURES {
+        declaration[key] = json!(false);
+    }
+    let path = app.path("accessibility_path").unwrap();
+    fsutil::json(&path, &json!({"declarations":[declaration.clone()]})).unwrap();
+    let mut server = MetadataFixture::default();
+    accessibility::sync(&app, "app", &mut server).unwrap();
+    accessibility::sync(&app, "app", &mut server).unwrap();
+    assert_eq!(server.posts, 1);
+    assert_eq!(server.patches, 0);
+    declaration["supportsVoiceover"] = json!(true);
+    fsutil::json(&path, &json!({"declarations":[declaration.clone()]})).unwrap();
+    accessibility::sync(&app, "app", &mut server).unwrap();
+    assert_eq!(server.patches, 1);
+    for resource in server.resources.values_mut() {
+        resource["attributes"]["state"] = json!("PUBLISHED");
+    }
+    declaration["supportsVoiceover"] = json!(false);
+    fsutil::json(&path, &json!({"declarations":[declaration]})).unwrap();
+    assert!(accessibility::sync(&app, "app", &mut server).is_err());
+    assert_eq!(server.patches, 1);
+}
+
+#[test]
+fn metadata_reauthenticates_version_build_and_upload_before_mutating_apple() {
+    for mismatch in ["version", "build", "checksum", "state"] {
+        let (_root, app) = app();
+        let mut candidate = candidate(&app);
+        let mut server = MetadataFixture::staged(&app, &mut candidate);
+        match mismatch {
+            "version" => {
+                server.apple.version.as_mut().unwrap()["attributes"]["versionString"] =
+                    json!("9.9.9")
+            }
+            "build" => server.apple.selected["id"] = json!("different-build"),
+            "checksum" => {
+                server.apple.file.as_mut().unwrap()["attributes"]["sourceFileChecksums"]["file"]["hash"] =
+                    json!("bad")
+            }
+            _ => {
+                server.apple.version.as_mut().unwrap()["attributes"]["appVersionState"] =
+                    json!("IN_REVIEW")
+            }
+        }
+        assert!(
+            metadata::sync(&app, &mut candidate, &mut server).is_err(),
+            "{mismatch}"
+        );
+        assert_eq!(server.posts + server.patches, 0);
+    }
+}
+
+#[derive(Default)]
+struct ScreenshotFixture {
+    assets: Vec<Value>,
+    posts: usize,
+    deletes: usize,
+    transfers: usize,
+    lose_delete: bool,
+}
+impl Api for ScreenshotFixture {
+    fn request(
+        &mut self,
+        method: &str,
+        path: &str,
+        query: &[(String, String)],
+        body: Option<&Value>,
+    ) -> Result<Value> {
+        support::validate(method, path, query, body)?;
+        if path == "/v1/appStoreVersionLocalizations/locale/appScreenshotSets" {
+            return Ok(
+                json!({"data":[{"id":"phone","attributes":{"screenshotDisplayType":"APP_IPHONE_67"}},{"id":"untouched-ipad","attributes":{"screenshotDisplayType":"APP_IPAD_PRO_3GEN_129"}}]}),
+            );
+        }
+        if path == "/v1/appScreenshotSets/phone/appScreenshots" {
+            return Ok(json!({"data":self.assets}));
+        }
+        if method == "POST" && path == "/v1/appScreenshots" {
+            self.posts += 1;
+            let mut asset = body.unwrap()["data"].clone();
+            asset["id"] = json!(format!("new-{}", self.posts));
+            asset["attributes"]["assetDeliveryState"]["state"] = json!("AWAITING_UPLOAD");
+            asset["attributes"]["uploadOperations"] = json!([]);
+            self.assets.push(asset.clone());
+            return Ok(json!({"data":asset}));
+        }
+        if path == "/v1/appScreenshotSets/phone/relationships/appScreenshots" {
+            let order = body.unwrap()["data"].as_array().unwrap();
+            self.assets
+                .sort_by_key(|v| order.iter().position(|o| o["id"] == v["id"]).unwrap());
+            return Ok(json!({}));
+        }
+        if let Some(id) = path.strip_prefix("/v1/appScreenshots/") {
+            let index = self.assets.iter().position(|v| v["id"] == id).unwrap();
+            if method == "DELETE" {
+                self.assets.remove(index);
+                self.deletes += 1;
+                if std::mem::take(&mut self.lose_delete) {
+                    bail!("Response lost after Apple deleted asset");
+                }
+                return Ok(json!({}));
+            }
+            if method == "PATCH" {
+                self.assets[index]["attributes"]["sourceFileChecksum"] =
+                    body.unwrap()["data"]["attributes"]["sourceFileChecksum"].clone();
+                self.assets[index]["attributes"]["assetDeliveryState"]["state"] = json!("COMPLETE");
+            }
+            return Ok(json!({"data":self.assets[index]}));
+        }
+        bail!("Unexpected screenshot request {method} {path}")
+    }
+    fn transfer(&mut self, _: &Path, _: &Value) -> Result<()> {
+        self.transfers += 1;
+        Ok(())
+    }
+}
+fn screenshot(app: &App) -> String {
+    use md5::{Digest, Md5};
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1320, 2868);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&vec![255; 1320 * 2868 * 3])
+        .unwrap();
+    fsutil::atomic(
+        &app.path("screenshots_path").unwrap().join("en-US/01.png"),
+        &bytes,
+    )
+    .unwrap();
+    format!("{:x}", Md5::digest(&bytes))
+}
+fn old_screenshot(id: &str, checksum: &str) -> Value {
+    json!({"type":"appScreenshots","id":id,"attributes":{"fileName":format!("fastlane-{id}.png"),"sourceFileChecksum":checksum,"assetDeliveryState":{"state":"COMPLETE"}}})
+}
+#[test]
+fn screenshots_reuse_legacy_bytes_and_verify_their_order_without_uploading() {
+    let (_root, app) = app();
+    let checksum = screenshot(&app);
+    let mut candidate = candidate(&app);
+    let mut server = ScreenshotFixture {
+        assets: vec![
+            old_screenshot("unrelated", "old"),
+            old_screenshot("matching", &checksum),
+        ],
+        ..Default::default()
+    };
+    for _ in 0..2 {
+        metadata::screenshots(&app, "en-US", "locale", &mut candidate, &mut server).unwrap();
+    }
+    assert_eq!((server.posts, server.transfers, server.deletes), (0, 0, 0));
+    assert_eq!(server.assets[0]["id"], "matching");
+    assert_eq!(server.assets[1]["id"], "unrelated");
+}
+#[test]
+fn screenshot_replacement_is_explicit_journaled_and_resumes_after_lost_delete() {
+    let (_root, mut app) = app();
+    screenshot(&app);
+    let mut candidate = candidate(&app);
+    let mut server = ScreenshotFixture {
+        assets: (0..10)
+            .map(|n| old_screenshot(&format!("old-{n}"), "old"))
+            .collect(),
+        lose_delete: true,
+        ..Default::default()
+    };
+    assert!(metadata::screenshots(&app, "en-US", "locale", &mut candidate, &mut server).is_err());
+    assert_eq!((server.posts, server.deletes), (0, 0));
+    app.config["app_store"]["screenshot_policy"] = json!("replace-configured");
+    assert!(metadata::screenshots(&app, "en-US", "locale", &mut candidate, &mut server).is_err());
+    let saved: Value =
+        serde_json::from_slice(&fs::read(candidate.directory.join("operation.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        saved["screenshot_changes"]["phone"]["before"]
+            .as_array()
+            .unwrap()
+            .len(),
+        10
+    );
+    metadata::screenshots(&app, "en-US", "locale", &mut candidate, &mut server).unwrap();
+    metadata::screenshots(&app, "en-US", "locale", &mut candidate, &mut server).unwrap();
+    assert_eq!((server.posts, server.transfers, server.deletes), (1, 1, 10));
+    assert_eq!(server.assets.len(), 1);
+}
+#[test]
+fn sealed_symbols_are_required_and_cannot_change_after_verification() {
+    let (_root, app) = app();
+    let candidate = candidate(&app);
+    fsutil::atomic(
+        &candidate.directory.join("symbols.zip"),
+        b"another build's symbols",
+    )
+    .unwrap();
+    assert!(store::Release::load(&app, &candidate.directory).is_err());
 }

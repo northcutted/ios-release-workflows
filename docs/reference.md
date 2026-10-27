@@ -49,6 +49,7 @@ Platform: northcutted/ios-release-workflows.
 | [Native iOS app lifecycle](#native-ios-app-lifecycle) | [native-app.yml](../.github/workflows/native-app.yml) | <code>workflow_call</code> |
 | [Package native CLI](#package-native-cli) | [native-binaries.yml](../.github/workflows/native-binaries.yml) | <code>workflow_dispatch</code> |
 | [Native reusable Actions rehearsal](#native-reusable-actions-rehearsal) | [native-caller.yml](../.github/workflows/native-caller.yml) | <code>pull_request</code>, <code>push</code>, <code>workflow_dispatch</code> |
+| [Native migration rehearsal](#native-migration-rehearsal) | [native-readiness.yml](../.github/workflows/native-readiness.yml) | <code>workflow_call</code> |
 | [Observe App Store releases](#observe-app-store-releases) | [observe.yml](../.github/workflows/observe.yml) | <code>workflow_call</code> |
 | [Platform checks](#platform-checks) | [platform-tests.yml](../.github/workflows/platform-tests.yml) | <code>push</code>, <code>pull_request</code>, <code>workflow_dispatch</code> |
 | [Prepare verified candidate](#prepare-verified-candidate) | [prepare.yml](../.github/workflows/prepare.yml) | <code>workflow_call</code> |
@@ -169,7 +170,7 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | <code>platform_revision</code> | <code>string</code> | Yes | — |  |
 | <code>cli_version</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>release_run</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
-| <code>version</code> | <code>string</code> | No | <code>1.0.0</code> |  |
+| <code>version</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>build_number</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 
 Named secrets: <code>IOS_RELEASE_API_ISSUER_ID</code>, <code>IOS_RELEASE_API_KEY_CONTENT</code>, <code>IOS_RELEASE_API_KEY_ID</code>, <code>IOS_RELEASE_DEMO_PASSWORD</code>, <code>IOS_RELEASE_SIGNING_PASSWORD</code>.
@@ -235,6 +236,37 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | Job | Needs | Execution | Condition |
 | --- | --- | --- | --- |
 | <code>app</code> | — | [.github/workflows/native-app.yml](../.github/workflows/native-app.yml) | — |
+
+### Native migration rehearsal
+
+[Source](../.github/workflows/native-readiness.yml) · [Actions](https://github.com/northcutted/ios-release-workflows/actions/workflows/native-readiness.yml)
+
+Triggers (cron expressions use UTC):
+
+```json
+{
+  "workflow_call": {}
+}
+```
+
+Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"read"}</code>.
+
+| Input | Type | Required | Default | Description / choices |
+| --- | --- | --- | --- | --- |
+| <code>platform_revision</code> | <code>string</code> | Yes | — |  |
+| <code>config</code> | <code>string</code> | No | <code>.github/ios-release.json</code> |  |
+| <code>runner</code> | <code>string</code> | No | <code>xcode-27</code> |  |
+| <code>screenshot_devices</code> | <code>string</code> | Yes | — |  |
+| <code>screenshot_scheme</code> | <code>string</code> | Yes | — |  |
+| <code>screenshot_target</code> | <code>string</code> | Yes | — |  |
+| <code>screenshot_test</code> | <code>string</code> | Yes | — |  |
+
+| Job | Needs | Execution | Condition |
+| --- | --- | --- | --- |
+| <code>inputs</code><br>Native store inputs and version policy | — | <code>ubuntu-24.04</code>; 30 min | — |
+| <code>qa</code><br>Native QA (${{ matrix.check }}) | — | <code>${{ matrix.check == 'test-compatibility' &amp;&amp; 'macos-26' &#124;&#124; inputs.runner }}</code>; 90 min | — |
+| <code>screenshots</code><br>Native screenshots (${{ matrix.device }}) | — | <code>${{ inputs.runner }}</code>; 90 min | — |
+| <code>gate</code><br>Native rehearsal gate | <code>inputs</code>, <code>qa</code>, <code>screenshots</code> | <code>ubuntu-24.04</code>; 5 min | <code>always()</code> |
 
 ### Observe App Store releases
 
@@ -424,3 +456,4 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | <code>native-tests</code><br>PicStrip Rust ${{ matrix.check }} | — | <code>${{ matrix.runner }}</code>; 90 min | — |
 | <code>qa-evidence</code><br>PicStrip Rust QA evidence compatibility | <code>native-tests</code> | <code>ubuntu-24.04</code>; 30 min | — |
 | <code>screenshots</code><br>PicStrip Rust screenshots (${{ matrix.device }}) | — | <code>xcode-27</code>; 90 min | — |
+| <code>store-inputs</code><br>Current PicStrip store and version parity | — | <code>ubuntu-24.04</code>; 30 min | — |

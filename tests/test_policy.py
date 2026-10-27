@@ -8,6 +8,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_native_rehearsal_cannot_receive_secrets_or_sign_provenance(self):
+        for field, value in [("environment", "native-signing"), ("permissions", {"id-token": "write"})]:
+            w = workflows(ROOT / ".github/workflows")
+            w["native-readiness.yml"]["jobs"]["qa"][field] = value
+            self.assertIn("PR path must not receive", "\n".join(validate(w)))
+
+    def test_native_preparation_requires_real_store_assets_and_symbols(self):
+        w = workflows(ROOT / ".github/workflows")
+        jobs = w["native-app.yml"]["jobs"]
+        jobs["seal"]["steps"][0]["with"].pop("lfs")
+        upload = next(s for s in jobs["verify"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+        upload["with"]["path"] = "build/application.ipa"
+        errors = "\n".join(validate(w))
+        self.assertIn("requires LFS", errors)
+        self.assertIn("retain verified symbols", errors)
+
     def test_native_retries_cannot_replace_exact_upstream_artifacts_with_names(self):
         w = workflows(ROOT / ".github/workflows")
         jobs = w["native-app.yml"]["jobs"]

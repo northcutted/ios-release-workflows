@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: northcutted/picstrip
-          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          ref: 04d874a305d75764266cf68af5a0449d1afeed2b
           persist-credentials: false
           path: consumer
       - name: Build the Rust CLI from this reviewed source
@@ -90,13 +90,13 @@ jobs:
         run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa "$CHECK"
         env:
           CHECK: ${{ matrix.check }}
-          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
           TEST_WORKERS: "1"
       - name: Audit the immutable consumer's catalogs
         if: always() && matrix.check == 'lint'
         run: GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer qa localization
         env:
-          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -105,6 +105,7 @@ jobs:
             consumer/qa-results/
             consumer/build/test_output/
             consumer/build/build-env.json
+            consumer/build/toolchain/
           if-no-files-found: error
           retention-days: 14
   qa-evidence:
@@ -120,7 +121,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: northcutted/picstrip
-          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          ref: 04d874a305d75764266cf68af5a0449d1afeed2b
           persist-credentials: false
           path: consumer
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -134,7 +135,7 @@ jobs:
           python3 platform/scripts/ci/evidence.py qa consumer/qa-results
           --output build/rust-qa --source "$SOURCE_SHA"
         env:
-          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rust-picstrip-qa-evidence
@@ -161,7 +162,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: northcutted/picstrip
-          ref: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          ref: 04d874a305d75764266cf68af5a0449d1afeed2b
           persist-credentials: false
           path: consumer
           lfs: true
@@ -178,7 +179,7 @@ jobs:
           --devices "$DEVICE" --languages en-US,ar-SA
         env:
           DEVICE: ${{ matrix.device }}
-          SOURCE_SHA: 61f886036722bd2ff9843582e3e1c02d8ebfd450
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -186,5 +187,51 @@ jobs:
           path: |
             consumer/build/rust-screenshots/
             consumer/build/build-env.json
+            consumer/build/toolchain/
+          if-no-files-found: error
+          retention-days: 14
+  store-inputs:
+    name: Current PicStrip store and version parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          path: platform
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: northcutted/picstrip
+          ref: 04d874a305d75764266cf68af5a0449d1afeed2b
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: true
+          path: consumer
+      - name: Build the native CLI
+        working-directory: platform/rust
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          cargo build --locked --release
+      - name: Validate every locale and compare the deployed version decision
+        run: |
+          export GITHUB_REPOSITORY=northcutted/picstrip
+          mkdir -p consumer/build/native-readiness
+          platform/rust/target/release/ios-release --app-root consumer store validate > consumer/build/native-readiness/store.json
+          platform/rust/target/release/ios-release --app-root consumer version --output build/native-readiness/version.json
+          PYTHONPATH=platform/src python3 - <<'PY'
+          import json
+          from ios_release.version import analyze
+          expected = analyze('consumer')
+          actual = json.load(open('consumer/build/native-readiness/version.json'))
+          assert actual == expected, 'Native version decision differs from deployed policy'
+          print('Native and deployed version decisions match, including release notes.')
+          PY
+        env:
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
+          TZ: UTC
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-picstrip-store-inputs
+          path: consumer/build/native-readiness/
           if-no-files-found: error
           retention-days: 14
