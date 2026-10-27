@@ -75,17 +75,46 @@ def validate(items):
             check(checkout.get("with", {}).get("lfs") is True and checkout.get("with", {}).get("fetch-depth") == 0, "Native preparation requires LFS assets and complete version history")
         check("ios-release store validate" in json.dumps(native["guard"]), "Native preparation must validate store inputs before signing")
         check("build/symbols.zip" in json.dumps(native["verify"]), "Native verification must retain verified symbols")
+        provenance = native["provenance"]
+        check(provenance.get("uses") == SLSA and provenance.get("needs") == "seal"
+              and provenance.get("with", {}).get("base64-subjects") == "${{ needs.seal.outputs.subjects }}"
+              and provenance.get("with", {}).get("upload-assets") is False
+              and "${{ github.run_attempt }}" in provenance.get("with", {}).get("provenance-name", "")
+              and not provenance.get("with", {}).get("continue-on-error") and not provenance.get("secrets"),
+              "Native provenance must use the isolated generator with exact subjects and no release publishing")
+        preparation = native["preparation"]
+        check(preparation.get("needs") == ["seal", "provenance"] and not preparation.get("continue-on-error"),
+              "Native preparation must depend on isolated provenance")
+        scripts = "\n".join(s.get("run", "") for s in preparation["steps"])
+        check("ios-release github verify-preparation" in scripts,
+              "Native preparation must authenticate both proofs before delivery")
+        downloads = [s.get("with", {}) for s in preparation["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
+        check(len(downloads) == 2 and downloads[0].get("artifact-ids") == "${{ needs.seal.outputs.artifact }}"
+              and downloads[1].get("name") == "${{ needs.provenance.outputs.provenance-name }}",
+              "Native preparation must consume exact sealed inputs and generated proof")
+        check(native["seal"].get("outputs", {}).get("subjects") == "${{ steps.subjects.outputs.subjects }}"
+              and "ios-release release subjects --github-output" in json.dumps(native["seal"]),
+              "Native provenance subjects must come from the sealed release")
+        for name in ["preparation", "select", "deliver", "production"]:
+            check(any(s.get("uses") == "$/actions/slsa-verifier" for s in native[name]["steps"]),
+                  "native-app/" + name + ": install reviewed SLSA verifier before consuming a preparation")
+        for name in ["seal", "preparation"]:
+            upload = next(s.get("with", {}) for s in native[name]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+            prefix = "native-sealed-" if name == "seal" else "native-release-"
+            check(upload.get("name", "").startswith(prefix) and "build-attestation.jsonl" in upload.get("path", "")
+                  and (name == "seal" or "provenance.intoto.jsonl" in upload.get("path", "")),
+                  "Native deliverable artifact must retain both signed proofs after verification")
         seal_scripts = "\n".join(s.get("run", "") for s in native["seal"]["steps"])
         check("install_syft.sh" in seal_scripts and "ios-release release sbom" in seal_scripts
               and re.search(r"ios-release release seal[^\n]*--require-sbom", seal_scripts),
               "Native preparation must generate and require source/runtime SBOMs")
-        for name in ["check", "qa", "verify", "select", "guard"]:
+        for name in ["check", "qa", "verify", "select", "guard", "preparation"]:
             job = native[name]
             check(not job.get("environment") and "secrets." not in json.dumps(job) and not (job.get("permissions") or {}).get("id-token"), "native-app/" + name + ": app QA and verification must be secret-free")
         build = native["build"]
         check(build.get("environment") == "native-signing" and "IOS_RELEASE_API_KEY" not in json.dumps(build) and not (build.get("permissions") or {}).get("id-token"), "Native build must receive signing assets without Apple API or provenance credentials")
         check(build.get("needs") == "signing" and native["qa"].get("needs") == "signing", "Native archive and QA must use the same signing input snapshot in parallel")
-        for name in ["signing", "qa", "build", "verify"]:
+        for name in ["signing", "qa", "build", "verify", "seal"]:
             uploads = [s for s in native[name]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
             check(len(uploads) == 1 and "${{ github.run_attempt }}" in uploads[0].get("with", {}).get("name", "")
                   and native[name].get("outputs", {}).get("artifact") == "${{ steps." + uploads[0].get("id", "") + ".outputs.artifact-id }}",

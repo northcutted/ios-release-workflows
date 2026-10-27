@@ -120,6 +120,19 @@ pub fn seal(
             .ok()
             .or_else(|| app.config["repository"].as_str().map(String::from))
     );
+    manifest["source_workflow"] = json!(
+        std::env::var("GITHUB_WORKFLOW_REF")
+            .ok()
+            .map(|reference| {
+                crate::provenance::workflow_path(
+                    manifest["repository"]
+                        .as_str()
+                        .context("Repository missing")?,
+                    &reference,
+                )
+            })
+            .transpose()?
+    );
     fsutil::json(&staged.join("release.json"), &manifest)?;
     fs::rename(staged, directory)?;
     Ok(manifest)

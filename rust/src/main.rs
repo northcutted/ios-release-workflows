@@ -186,6 +186,15 @@ enum Signing {
 enum Release {
     /// Inventory source dependencies and the independently verified IPA using reviewed Syft.
     Sbom,
+    /// Hash the exact sealed package, manifest and IPA for the isolated generator.
+    Subjects {
+        #[arg(long, default_value = "build/native-release")]
+        release: PathBuf,
+        #[arg(long, default_value = "build/native-release.zip")]
+        package: PathBuf,
+        #[arg(long)]
+        github_output: bool,
+    },
     Build {
         #[arg(long)]
         version: String,
@@ -264,6 +273,13 @@ enum Store {
 }
 #[derive(Subcommand)]
 enum Github {
+    /// Authenticate both proofs and the sealed package in the current main preparation.
+    VerifyPreparation {
+        #[arg(long, default_value = "build/native-preparation")]
+        directory: PathBuf,
+        #[arg(long, default_value = "build/native-release")]
+        output: PathBuf,
+    },
     Controls {
         #[arg(long, default_value = "xcode-27")]
         runner: String,
@@ -428,6 +444,25 @@ fn run(cli: Cli) -> Result<i32> {
             println!("{}", serde_json::to_string_pretty(&value)?);
         }
         Commands::Github { action } => match action {
+            Github::VerifyPreparation { directory, output } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"verify-preparation","directory":directory,"output":output,
+                        "requires":["main dispatch identity","GitHub build attestation","isolated SLSA proof","exact package, manifest and IPA subjects"]})
+                    );
+                } else {
+                    let identity = ios_release_native::provenance::Identity::current(&app)?;
+                    let manifest = ios_release_native::github::verify_preparation(
+                        &app,
+                        &app.root.join(directory),
+                        &app.root.join(output),
+                        &identity,
+                        &mut executor,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&manifest)?);
+                }
+            }
             Github::Controls { runner } => {
                 if cli.plan {
                     println!(
@@ -446,7 +481,7 @@ fn run(cli: Cli) -> Result<i32> {
                 if cli.plan {
                     println!(
                         "{}",
-                        json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, attestation, manifest and receipt identity"})
+                        json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, GitHub attestation, isolated SLSA proof, package, manifest and receipt identity"})
                     );
                 } else {
                     let manifest = ios_release_native::github::fetch(
@@ -505,6 +540,13 @@ fn run(cli: Cli) -> Result<i32> {
         }
         Commands::Release { action } => {
             if cli.plan {
+                if matches!(action, Release::Subjects { .. }) {
+                    println!(
+                        "{}",
+                        json!({"operation":"release-subjects","subjects":["native-release.zip","release.json","application.ipa"],"executes_app_code":false})
+                    );
+                    return Ok(0);
+                }
                 if matches!(action, Release::Sbom) {
                     println!(
                         "{}",
@@ -519,6 +561,26 @@ fn run(cli: Cli) -> Result<i32> {
                 return Ok(0);
             }
             match action {
+                Release::Subjects {
+                    release,
+                    package,
+                    github_output,
+                } => {
+                    let output = if github_output {
+                        Some(PathBuf::from(std::env::var("GITHUB_OUTPUT")?))
+                    } else {
+                        None
+                    };
+                    println!(
+                        "{}",
+                        ios_release_native::provenance::subjects(
+                            &app,
+                            &app.root.join(release),
+                            &app.root.join(package),
+                            output.as_deref()
+                        )?
+                    );
+                }
                 Release::Prepare {
                     version,
                     build_number,
