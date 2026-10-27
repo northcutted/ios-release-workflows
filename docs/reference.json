@@ -465,6 +465,11 @@
         "build_number": {
           "type": "string",
           "default": ""
+        },
+        "durable_records": {
+          "description": "Preserve preparation and recovery receipts as immutable GitHub prereleases",
+          "type": "boolean",
+          "default": false
         }
       },
       "secret_names": [
@@ -472,7 +477,9 @@
         "IOS_RELEASE_API_KEY_CONTENT",
         "IOS_RELEASE_API_KEY_ID",
         "IOS_RELEASE_DEMO_PASSWORD",
-        "IOS_RELEASE_SIGNING_PASSWORD"
+        "IOS_RELEASE_SIGNING_PASSWORD",
+        "RELEASE_APP_ID",
+        "RELEASE_APP_PRIVATE_KEY"
       ],
       "outputs": {},
       "permissions": {
@@ -625,6 +632,23 @@
           "secret_names": []
         },
         {
+          "id": "record_preparation",
+          "name": "Preserve authenticated preparation beyond Actions retention",
+          "needs": [
+            "preparation"
+          ],
+          "condition": "inputs.durable_records",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "release-publishing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
           "id": "select",
           "name": "Authenticate the exact preparation before requesting Apple credentials",
           "needs": [
@@ -693,6 +717,24 @@
             "id-token": "write",
             "attestations": "write",
             "artifact-metadata": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "record_receipt",
+          "name": "Preserve signed interrupted and successful recovery receipts",
+          "needs": [
+            "receipt",
+            "select"
+          ],
+          "condition": "always() && inputs.durable_records && needs.receipt.result == 'success' && needs.select.result == 'success'",
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": "release-publishing",
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
           },
           "secret_names": []
         },

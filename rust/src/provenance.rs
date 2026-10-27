@@ -13,7 +13,7 @@ pub const BUILDER: &str = "https://github.com/slsa-framework/slsa-github-generat
 pub const PROOF: &str = "provenance.intoto.jsonl";
 pub const BUNDLE: &str = "build-attestation.jsonl";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Identity {
     pub repository: String,
     pub source_sha: String,

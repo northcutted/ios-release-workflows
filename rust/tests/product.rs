@@ -17,6 +17,8 @@ use p256::{
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path};
+#[path = "support/records.rs"]
+mod record_tests;
 mod support;
 
 const PASSWORD: &str = "separate signing test password";

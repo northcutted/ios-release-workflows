@@ -42,6 +42,7 @@ Use the binary by its full path while evaluating it. Do not replace the existing
 | `signing sync`, `signing import`, `signing status` | Reconciles owned certificates/profiles, imports existing identities and reports renewal state |
 | `qa all`, `release prepare` | Runs configured QA and prepares a source-bound signed release |
 | `github setup`, `github fetch` | Configures protected native environments or downloads an authenticated preparation and recovery receipt |
+| `github record-preparation`, `github record-receipt` | Authenticates and preserves immutable recovery records using the scoped publisher App |
 | `store upload`, `store wait`, `store testflight` | Transfers the exact IPA, reconciles Apple processing and assigns beta groups |
 | `store stage`, `store metadata`, `store submit --confirm` | Selects the exact build, applies content and requests review |
 | `store validate`, `store beta-groups --create …` | Checks local store content before writes and configures an app-owned beta group by name |

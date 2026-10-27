@@ -8,6 +8,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_durable_records_preserve_publisher_boundary_and_interrupted_receipts(self):
+        for change in ["environment", "token", "authority", "artifact", "apple", "interrupted", "bundle", "verifier"]:
+            w = workflows(ROOT / ".github/workflows")
+            jobs = w["native-app.yml"]["jobs"]
+            job = jobs["record_receipt"]
+            if change == "environment": job["environment"] = "native-app-store"
+            elif change == "token":
+                next(s for s in job["steps"] if s.get("id") == "publisher")["with"]["repositories"] = ""
+            elif change == "authority": job["permissions"]["contents"] = "write"
+            elif change == "artifact":
+                next(s for s in job["steps"] if "artifact-ids" in s.get("with", {}))["with"] = {"name":"latest"}
+            elif change == "apple": job["env"]["IOS_RELEASE_API_KEY_ID"] = "${{ secrets.IOS_RELEASE_API_KEY_ID }}"
+            elif change == "interrupted": job["if"] = "inputs.durable_records"
+            elif change == "bundle":
+                next(s for s in jobs["receipt"]["steps"] if s.get("id") == "receipt_artifact")["with"]["path"] = "receipt/operation.json"
+            else: job["steps"] = [s for s in job["steps"] if s.get("uses") != "$/actions/slsa-verifier"]
+            self.assertTrue(validate(w), change)
+
     def test_native_provenance_cannot_skip_verification_publish_or_lose_proofs(self):
         for change in ["generator", "publish", "continue", "dependency", "verify", "artifact", "bundle", "installer"]:
             w = workflows(ROOT / ".github/workflows")

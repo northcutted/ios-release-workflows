@@ -188,6 +188,8 @@ struct Fake {
     boot_status: i32,
     malformed: bool,
     inventory_statuses: std::collections::VecDeque<i32>,
+    export_statuses: std::collections::VecDeque<i32>,
+    export_error: bool,
 }
 impl Fake {
     fn new(status: i32) -> Self {
@@ -197,6 +199,8 @@ impl Fake {
             boot_status: 0,
             malformed: false,
             inventory_statuses: Default::default(),
+            export_statuses: Default::default(),
+            export_error: false,
         }
     }
 }
@@ -225,12 +229,16 @@ impl Executor for Fake {
                 (self.boot_status, "boot output".into())
             }
             "xcrun" if arguments[0] == "xcresulttool" => {
+                if self.export_error {
+                    anyhow::bail!("cannot launch xcresulttool");
+                }
+                let status = self.export_statuses.pop_front().unwrap_or(0);
                 if self.malformed {
-                    (0, "{}".into())
+                    (status, "{}".into())
                 } else {
                     let (summary, tree) = test_results(&["Passed"]);
                     (
-                        0,
+                        status,
                         if arguments[3] == "summary" {
                             summary.to_string()
                         } else {
@@ -289,6 +297,116 @@ fn malformed_result_cannot_create_green_qa() {
     fake.malformed = true;
     assert_ne!(qa::run(&app, "test", &mut fake).unwrap(), 0);
     assert!(!app.root.join("qa-results/test/report.junit").exists());
+    assert_eq!(
+        fake.calls
+            .iter()
+            .filter(|s| args(s).first().map(String::as_str) == Some("xcresulttool"))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn result_export_timeout_retries_only_the_same_bundle_and_preserves_xcode_status() {
+    for xcode_status in [0, 65] {
+        let (_dir, app) = fixture();
+        let mut fake = Fake::new(xcode_status);
+        fake.export_statuses = [124, 0, 124, 0].into();
+        assert_eq!(qa::run(&app, "test", &mut fake).unwrap(), xcode_status);
+        let calls: Vec<_> = fake
+            .calls
+            .iter()
+            .filter(|s| args(s).first().map(String::as_str) == Some("xcresulttool"))
+            .collect();
+        assert_eq!(calls.len(), 4);
+        assert!(calls.iter().all(|s| s.timeout_seconds == 120
+            && s.env["DEVELOPER_DIR"] == app.xcode(false).unwrap()["path"].as_str().unwrap()));
+        assert_eq!(args(calls[0]), args(calls[1]));
+        assert_eq!(args(calls[2]), args(calls[3]));
+        assert_eq!(args(calls[0])[5], args(calls[2])[5]);
+        assert_eq!(
+            fake.calls
+                .iter()
+                .filter(|s| s.program == "xcodebuild" && args(s).contains(&"test".into()))
+                .count(),
+            1
+        );
+        let journal: Value = serde_json::from_slice(
+            &fs::read(app.root.join("qa-results/test/result-export.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            journal["attempts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| r["status"].as_i64().unwrap())
+                .collect::<Vec<_>>(),
+            [124, 0, 124, 0]
+        );
+        assert_eq!(journal["attempts"][1]["attempt"], 2);
+        assert!(journal["attempts"][0]["elapsed_seconds"].is_number());
+        assert!(app.root.join("qa-results/test/report.junit").exists());
+    }
+}
+
+#[test]
+fn failed_result_export_is_bounded_and_cannot_reuse_stale_green_evidence() {
+    for (statuses, error, expected_calls, summary_written) in [
+        (vec![124, 124], false, 2, false),
+        (vec![1], false, 1, false),
+        (vec![], true, 1, false),
+        (vec![0, 124, 124], false, 3, true),
+    ] {
+        let (_dir, app) = fixture();
+        let mut fake = Fake::new(0);
+        fake.export_statuses = statuses.into();
+        fake.export_error = error;
+        for name in [
+            "report.junit",
+            "summary.json",
+            "tests.json",
+            "result-export.json",
+        ] {
+            fsutil::atomic(
+                &app.root.join("qa-results/test").join(name),
+                b"stale evidence",
+            )
+            .unwrap();
+        }
+        fsutil::atomic(
+            &app.root.join("build/test_output/report.junit"),
+            b"<stale/>",
+        )
+        .unwrap();
+        assert_ne!(qa::run(&app, "test", &mut fake).unwrap(), 0);
+        assert!(!app.root.join("qa-results/test/report.junit").exists());
+        assert!(!app.root.join("build/test_output/report.junit").exists());
+        assert!(!app.root.join("qa-results/test/tests.json").exists());
+        assert_eq!(
+            app.root.join("qa-results/test/summary.json").exists(),
+            summary_written
+        );
+        let journal: Value = serde_json::from_slice(
+            &fs::read(app.root.join("qa-results/test/result-export.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            journal["attempts"].as_array().unwrap().len(),
+            expected_calls
+        );
+        if error {
+            assert_eq!(
+                journal["attempts"][0]["error"],
+                "cannot launch xcresulttool"
+            );
+        }
+        let result: Value = serde_json::from_slice(
+            &fs::read(app.root.join("qa-results/test/result.json")).unwrap(),
+        )
+        .unwrap();
+        assert_ne!(result["status"], 0);
+    }
 }
 #[test]
 fn readiness_wait_uses_one_bounded_uuid_command() {

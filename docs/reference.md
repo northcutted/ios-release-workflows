@@ -172,8 +172,9 @@ Concurrency: <code>null</code>. Default token permissions: <code>{"contents":"re
 | <code>release_run</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>version</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
 | <code>build_number</code> | <code>string</code> | No | <code>"" (blank)</code> |  |
+| <code>durable_records</code> | <code>boolean</code> | No | <code>false</code> | Preserve preparation and recovery receipts as immutable GitHub prereleases |
 
-Named secrets: <code>IOS_RELEASE_API_ISSUER_ID</code>, <code>IOS_RELEASE_API_KEY_CONTENT</code>, <code>IOS_RELEASE_API_KEY_ID</code>, <code>IOS_RELEASE_DEMO_PASSWORD</code>, <code>IOS_RELEASE_SIGNING_PASSWORD</code>.
+Named secrets: <code>IOS_RELEASE_API_ISSUER_ID</code>, <code>IOS_RELEASE_API_KEY_CONTENT</code>, <code>IOS_RELEASE_API_KEY_ID</code>, <code>IOS_RELEASE_DEMO_PASSWORD</code>, <code>IOS_RELEASE_SIGNING_PASSWORD</code>, <code>RELEASE_APP_ID</code>, <code>RELEASE_APP_PRIVATE_KEY</code>.
 
 | Job | Needs | Execution | Condition |
 | --- | --- | --- | --- |
@@ -186,10 +187,12 @@ Named secrets: <code>IOS_RELEASE_API_ISSUER_ID</code>, <code>IOS_RELEASE_API_KEY
 | <code>seal</code><br>Seal and attest the verified release without compiling app code | <code>verify</code>, <code>qa</code>, <code>signing</code> | <code>ubuntu-24.04</code>; 30 min | — |
 | <code>provenance</code><br>Generate isolated native release provenance | <code>seal</code> | [generator_generic_slsa3.yml](https://github.com/slsa-framework/slsa-github-generator/blob/v2.1.0/.github/workflows/generator_generic_slsa3.yml) | — |
 | <code>preparation</code><br>Authenticate both proofs before exposing a deliverable preparation | <code>seal</code>, <code>provenance</code> | <code>ubuntu-24.04</code>; 30 min | — |
+| <code>record_preparation</code><br>Preserve authenticated preparation beyond Actions retention | <code>preparation</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>release-publishing</code> | <code>inputs.durable_records</code> |
 | <code>select</code><br>Authenticate the exact preparation before requesting Apple credentials | <code>guard</code> | <code>ubuntu-24.04</code>; 30 min | <code>contains(fromJSON('["testflight","stage","metadata","submit","publish","phase-pause","phase-resume","phase-complete"]'), inputs.operation)</code> |
 | <code>deliver</code><br>Deliver verified beta or update store content | <code>select</code> | <code>ubuntu-24.04</code>; 90 min<br>Environment: <code>native-app-store</code> | <code>contains(fromJSON('["testflight","stage","metadata"]'), inputs.operation)</code> |
 | <code>production</code><br>Owner-approved App Review or public release | <code>select</code> | <code>ubuntu-24.04</code>; 90 min<br>Environment: <code>native-production</code> | <code>contains(fromJSON('["submit","publish","phase-pause","phase-resume","phase-complete"]'), inputs.operation)</code> |
 | <code>receipt</code><br>Attest operation recovery state without Apple credentials | <code>deliver</code>, <code>production</code>, <code>select</code> | <code>ubuntu-24.04</code>; 30 min | <code>always() &amp;&amp; (needs.deliver.result != 'skipped' &#124;&#124; needs.production.result != 'skipped') &amp;&amp; needs.select.result == 'success'</code> |
+| <code>record_receipt</code><br>Preserve signed interrupted and successful recovery receipts | <code>receipt</code>, <code>select</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>release-publishing</code> | <code>always() &amp;&amp; inputs.durable_records &amp;&amp; needs.receipt.result == 'success' &amp;&amp; needs.select.result == 'success'</code> |
 | <code>status</code><br>Read current Apple app and build status | <code>guard</code> | <code>ubuntu-24.04</code>; 30 min<br>Environment: <code>native-app-store</code> | <code>inputs.operation == 'status'</code> |
 
 ### Package native CLI

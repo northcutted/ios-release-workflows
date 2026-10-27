@@ -13,6 +13,7 @@ pub mod process;
 pub mod project;
 pub mod provenance;
 pub mod qa;
+pub mod records;
 pub mod release;
 pub mod results;
 pub mod sbom;

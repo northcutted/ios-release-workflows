@@ -1,12 +1,12 @@
 use crate::{
     config::App,
     fsutil,
-    process::{Executor, Step, checked},
+    process::{Executor, Step},
     results, simulator, toolchain,
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::Instant};
 
 pub fn command(
     app: &App,
@@ -91,6 +91,9 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
     remove(&directory.join("report.junit"))?;
     if name.starts_with("test") {
         remove(&app.root.join("build/test_output/report.junit"))?;
+        for file in ["summary.json", "tests.json", "result-export.json"] {
+            remove(&directory.join(file))?;
+        }
     }
     let mut status = 1;
     let outcome = (|| -> Result<()> {
@@ -168,26 +171,14 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
         if name.starts_with("test") {
             let mut reports = Vec::new();
             for report in ["summary", "tests"] {
-                let raw = checked(
+                reports.push(export_result(
+                    app,
+                    &bundle,
+                    &selected.developer,
+                    &directory,
+                    report,
                     executor,
-                    &Step::new(
-                        "xcrun",
-                        [
-                            "xcresulttool",
-                            "get",
-                            "test-results",
-                            report,
-                            "--path",
-                            bundle.to_str().context("Invalid result path")?,
-                            "--compact",
-                        ],
-                        30,
-                    )
-                    .developer(&selected.developer),
-                    &app.root,
-                )?;
-                fsutil::atomic(&directory.join(format!("{report}.json")), raw.as_bytes())?;
-                reports.push(serde_json::from_str::<Value>(&raw)?);
+                )?);
             }
             let result = results::junit(&reports[0], &reports[1])?;
             fsutil::atomic(&directory.join("report.junit"), result.xml.as_bytes())?;
@@ -225,6 +216,87 @@ pub fn run(app: &App, name: &str, executor: &mut impl Executor) -> Result<i32> {
         &json!({"check":name,"status":status,"inputs_sha256":inputs_sha256,"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok()}),
     )?;
     Ok(status)
+}
+
+fn export_result(
+    app: &App,
+    bundle: &Path,
+    developer: &str,
+    directory: &Path,
+    report: &str,
+    executor: &mut impl Executor,
+) -> Result<Value> {
+    // xcrun/xcresulttool can start slowly on a cold hosted runner even after XCTest
+    // succeeds. Retry only the read of this exact bundle, never the app test run.
+    let step = Step::new(
+        "xcrun",
+        [
+            "xcresulttool",
+            "get",
+            "test-results",
+            report,
+            "--path",
+            bundle.to_str().context("Invalid result path")?,
+            "--compact",
+        ],
+        120,
+    )
+    .developer(developer);
+    let diagnostics = directory.join("result-export.json");
+    let mut journal: Value = if diagnostics.exists() {
+        serde_json::from_slice(&fs::read(&diagnostics)?)?
+    } else {
+        json!({"attempts":[]})
+    };
+    for attempt in 1..=2 {
+        let started = Instant::now();
+        let result = executor.run(&step, &app.root, None);
+        let mut record = json!({"report":report,"command":step,"attempt":attempt,
+            "elapsed_seconds":started.elapsed().as_secs_f64()});
+        match &result {
+            Ok(output) => {
+                record["status"] = json!(output.status);
+                record["stdout"] = json!(output.stdout);
+            }
+            Err(error) => record["error"] = json!(error.to_string()),
+        }
+        journal["attempts"]
+            .as_array_mut()
+            .context("Invalid result export journal")?
+            .push(record);
+        fsutil::json(&diagnostics, &journal)?;
+        let output = result.with_context(|| {
+            format!(
+                "Cannot export XCTest {report}; see {}",
+                diagnostics.display()
+            )
+        })?;
+        if output.status == 124 && attempt == 1 {
+            eprintln!(
+                "XCTest {report} export timed out after 120 seconds; retrying the same bundle once. Diagnostics: {}",
+                diagnostics.display()
+            );
+            continue;
+        }
+        ensure!(
+            output.status == 0,
+            "XCTest {report} export exited {}; see {}",
+            output.status,
+            diagnostics.display()
+        );
+        let value = serde_json::from_str(&output.stdout).with_context(|| {
+            format!(
+                "Invalid XCTest {report} JSON; see {}",
+                diagnostics.display()
+            )
+        })?;
+        fsutil::atomic(
+            &directory.join(format!("{report}.json")),
+            output.stdout.as_bytes(),
+        )?;
+        return Ok(value);
+    }
+    unreachable!("The second export always returns")
 }
 
 fn remove(path: &Path) -> Result<()> {
