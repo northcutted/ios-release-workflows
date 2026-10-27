@@ -443,7 +443,9 @@ fn sealed_releases_cannot_be_overwritten() {
 #[test]
 fn sealed_sboms_roundtrip_and_reject_partial_or_cross_archive_evidence() {
     let (_root, mut app) = app();
-    app.config["repository"] = json!("owner/app");
+    // Release loading enforces the CI repository; keep the fixture in that scope.
+    let repository = std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "owner/app".into());
+    app.config["repository"] = json!(repository);
     app.save().unwrap();
     let original = candidate(&app);
     let missing = app.root.join("build/missing-sbom");
@@ -457,7 +459,7 @@ fn sealed_sboms_roundtrip_and_reject_partial_or_cross_archive_evidence() {
     for name in ["source.spdx.json", "ipa.spdx.json"] {
         fsutil::json(&folder.join(name), &document).unwrap();
     }
-    let report = json!({"schema_version":1,"generator":{"name":"syft","version":"1.44.0"},"repository":"owner/app",
+    let report = json!({"schema_version":1,"generator":{"name":"syft","version":"1.44.0"},"repository":repository,
         "archive_sha256":fsutil::sha256(&archive_path).unwrap(),"source_sha":archive["source_sha"],"run_id":archive["run_id"],
         "inputs_sha256":archive["inputs_sha256"],"ipa_sha256":archive["ipa_sha256"],
         "files":{"source.spdx.json":fsutil::sha256(&folder.join("source.spdx.json")).unwrap(),"ipa.spdx.json":fsutil::sha256(&folder.join("ipa.spdx.json")).unwrap()}});
