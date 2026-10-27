@@ -122,7 +122,7 @@ fn validate_name(name: &str) -> Result<()> {
             || store
             || matches!(
                 name,
-                "symbols.zip" | "source.spdx.json" | "ipa.spdx.json" | "version.json"
+                "symbols.zip" | "source.spdx.json" | "ipa.spdx.json" | "sbom.json" | "version.json"
             ),
         "Unexpected release input: {name}"
     );
@@ -158,6 +158,12 @@ pub fn names(manifest: &Value) -> Result<Vec<String>> {
             "Invalid release checksum"
         );
     }
+    let sboms = ["source.spdx.json", "ipa.spdx.json", "sbom.json"];
+    ensure!(
+        sboms.iter().all(|s| !files.contains_key(*s))
+            || sboms.iter().all(|s| files.contains_key(*s)),
+        "Release has a partial SBOM package"
+    );
     Ok(files
         .keys()
         .cloned()

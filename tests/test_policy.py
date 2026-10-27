@@ -8,6 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_native_preparation_cannot_omit_bound_sboms(self):
+        for omitted in ["install_syft.sh", "ios-release release sbom", "--require-sbom"]:
+            w = workflows(ROOT / ".github/workflows")
+            for step in w["native-app.yml"]["jobs"]["seal"]["steps"]:
+                if "run" in step:
+                    step["run"] = step["run"].replace(omitted, "omitted")
+            self.assertIn("require source/runtime SBOMs", "\n".join(validate(w)))
+
     def test_native_rehearsal_cannot_receive_secrets_or_sign_provenance(self):
         for field, value in [("environment", "native-signing"), ("permissions", {"id-token": "write"})]:
             w = workflows(ROOT / ".github/workflows")

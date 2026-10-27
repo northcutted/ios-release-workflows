@@ -35,6 +35,13 @@ jobs:
           target/release/ios-release --commands-json
           target/release/ios-release doctor
           python3 tests/parity.py target/release/ios-release
+      - name: Install reviewed Syft for the source and IPA integration test
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/install_syft.sh
+      - name: Scan real source and IPA fixtures with reviewed Syft
+        if: runner.os == 'Linux'
+        working-directory: rust
+        run: cargo test --locked --test sbom syft_scans_real_source_and_ipa -- --ignored
       - name: Package the tested binary
         working-directory: rust
         run: |

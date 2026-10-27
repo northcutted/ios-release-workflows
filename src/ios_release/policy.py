@@ -75,6 +75,10 @@ def validate(items):
             check(checkout.get("with", {}).get("lfs") is True and checkout.get("with", {}).get("fetch-depth") == 0, "Native preparation requires LFS assets and complete version history")
         check("ios-release store validate" in json.dumps(native["guard"]), "Native preparation must validate store inputs before signing")
         check("build/symbols.zip" in json.dumps(native["verify"]), "Native verification must retain verified symbols")
+        seal_scripts = "\n".join(s.get("run", "") for s in native["seal"]["steps"])
+        check("install_syft.sh" in seal_scripts and "ios-release release sbom" in seal_scripts
+              and re.search(r"ios-release release seal[^\n]*--require-sbom", seal_scripts),
+              "Native preparation must generate and require source/runtime SBOMs")
         for name in ["check", "qa", "verify", "select", "guard"]:
             job = native[name]
             check(not job.get("environment") and "secrets." not in json.dumps(job) and not (job.get("permissions") or {}).get("id-token"), "native-app/" + name + ": app QA and verification must be secret-free")

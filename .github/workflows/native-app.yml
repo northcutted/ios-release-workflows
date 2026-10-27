@@ -274,10 +274,14 @@ jobs:
           artifact-ids: ${{ needs.qa.outputs.artifact }}
           merge-multiple: true
           path: ${{ inputs.app_root }}/qa-results/
+      - name: Install reviewed source and IPA cataloguer
+        run: bash "$IOS_RELEASE_NATIVE_ROOT/scripts/ci/install_syft.sh"
+      - name: Inventory source and verified shipped components without app credentials
+        run: ios-release release sbom
       - name: Bind all successful QA to the verified binary and prepare its package
         run: |
           ios-release version --requested "$VERSION"
-          ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER"
+          ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER" --require-sbom
           ios-release release pack
         env:
           VERSION: ${{ needs.signing.outputs.version }}

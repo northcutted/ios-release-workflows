@@ -14,6 +14,7 @@ pub mod project;
 pub mod qa;
 pub mod release;
 pub mod results;
+pub mod sbom;
 pub mod screenshots;
 pub mod signing;
 pub mod signing_inputs;
