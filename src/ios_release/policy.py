@@ -108,13 +108,41 @@ def validate(items):
         check("install_syft.sh" in seal_scripts and "ios-release release sbom" in seal_scripts
               and re.search(r"ios-release release seal[^\n]*--require-sbom", seal_scripts),
               "Native preparation must generate and require source/runtime SBOMs")
+        for name, upstream in [("record_preparation", "preparation"), ("record_receipt", "receipt")]:
+            job = native[name]
+            body = json.dumps(job)
+            token = [s for s in job["steps"] if s.get("uses", "").startswith("actions/create-github-app-token@")]
+            downloads = [s.get("with", {}) for s in job["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
+            check(job.get("environment") == "release-publishing" and "inputs.durable_records" in job.get("if", "")
+                  and job.get("permissions") == {"contents": "read", "actions": "read"}
+                  and (job.get("concurrency") or {}).get("cancel-in-progress") is False
+                  and "IOS_RELEASE_API_KEY" not in body and "IOS_RELEASE_SIGNING_PASSWORD" not in body
+                  and "release build" not in body and "qa all" not in body,
+                  "Native durable records must preserve publisher isolation and opt-in")
+            check(len(token) == 1 and token[0].get("with", {}).get("permission-contents") == "write"
+                  and token[0]["with"].get("repositories") == "${{ github.event.repository.name }}"
+                  and "ios-release github record-" in body and "${{ steps.publisher.outputs.token }}" in body,
+                  "Native durable records require the repository-scoped publisher App")
+            check(len(downloads) == 1 and downloads[0].get("artifact-ids") == "${{ needs." + upstream + ".outputs.artifact }}"
+                  and downloads[0].get("merge-multiple") is True and "name" not in downloads[0],
+                  "Native durable records must consume exact authenticated artifacts")
+            check(any(s.get("uses") == "$/actions/slsa-verifier" for s in job["steps"]),
+                  "Native durable records require both preparation proofs")
+        check(native["record_preparation"].get("needs") == "preparation"
+              and native["record_receipt"].get("needs") == ["receipt", "select"]
+              and "always()" in native["record_receipt"].get("if", "")
+              and "needs.receipt.result == 'success'" in native["record_receipt"].get("if", ""),
+              "Native durable recovery must preserve interrupted operation receipts")
+        receipt_upload = next(s.get("with", {}) for s in native["receipt"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+        check("operation-attestation.jsonl" in receipt_upload.get("path", ""),
+              "Native durable receipts must retain their signed bundle")
         for name in ["check", "qa", "verify", "select", "guard", "preparation"]:
             job = native[name]
             check(not job.get("environment") and "secrets." not in json.dumps(job) and not (job.get("permissions") or {}).get("id-token"), "native-app/" + name + ": app QA and verification must be secret-free")
         build = native["build"]
         check(build.get("environment") == "native-signing" and "IOS_RELEASE_API_KEY" not in json.dumps(build) and not (build.get("permissions") or {}).get("id-token"), "Native build must receive signing assets without Apple API or provenance credentials")
         check(build.get("needs") == "signing" and native["qa"].get("needs") == "signing", "Native archive and QA must use the same signing input snapshot in parallel")
-        for name in ["signing", "qa", "build", "verify", "seal"]:
+        for name in ["signing", "qa", "build", "verify", "seal", "preparation", "receipt"]:
             uploads = [s for s in native[name]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
             check(len(uploads) == 1 and "${{ github.run_attempt }}" in uploads[0].get("with", {}).get("name", "")
                   and native[name].get("outputs", {}).get("artifact") == "${{ steps." + uploads[0].get("id", "") + ".outputs.artifact-id }}",

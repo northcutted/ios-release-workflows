@@ -98,7 +98,7 @@ pub fn controls(app: &App, runner: &str, executor: &mut impl Executor) -> Result
     }
     Ok(())
 }
-fn request(
+pub(crate) fn request(
     executor: &mut impl Executor,
     root: &Path,
     method: &str,
@@ -321,7 +321,7 @@ pub fn validate_run<'a>(value: &'a Value, repo: &str, run: u64) -> Result<&'a st
     Ok(sha)
 }
 
-fn verify_attestation(
+pub(crate) fn verify_attestation(
     app: &App,
     file: &Path,
     bundle: Option<&Path>,
@@ -455,25 +455,16 @@ fn selected_run(app: &App, run: u64, executor: &mut impl Executor) -> Result<Val
 }
 pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -> Result<Value> {
     ensure!(run > 0, "Select a preparation run ID");
-    let selected = selected_run(app, run, executor)?;
-    let source = selected["head_sha"].as_str().unwrap();
-    let attempt = selected["run_attempt"].as_u64().unwrap();
-    let temp = download(
-        app,
-        run,
-        &format!("native-release-{run}-{attempt}"),
-        executor,
-    )?;
-    let identity = crate::provenance::Identity {
-        repository: repository(app)?.into(),
-        source_sha: source.into(),
-        workflow: selected["path"]
-            .as_str()
-            .context("Selected workflow path missing")?
-            .into(),
-        run,
-        attempt,
-        event: "workflow_dispatch".into(),
+    let identity = preparation_identity(app, run, executor)?;
+    let attempt = identity.attempt;
+    let temp = match crate::records::download_preparation(app, &identity, executor)? {
+        Some(directory) => directory,
+        None => download(
+            app,
+            run,
+            &format!("native-release-{run}-{attempt}"),
+            executor,
+        )?,
     };
     fsutil::confined(&app.root, output)?;
     ensure!(
@@ -489,7 +480,28 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
     Ok(manifest)
 }
 
-fn authenticate_preparation(
+pub(crate) fn preparation_identity(
+    app: &App,
+    run: u64,
+    executor: &mut impl Executor,
+) -> Result<crate::provenance::Identity> {
+    let selected = selected_run(app, run, executor)?;
+    let source = selected["head_sha"].as_str().unwrap();
+    let attempt = selected["run_attempt"].as_u64().unwrap();
+    Ok(crate::provenance::Identity {
+        repository: repository(app)?.into(),
+        source_sha: source.into(),
+        workflow: selected["path"]
+            .as_str()
+            .context("Selected workflow path missing")?
+            .into(),
+        run,
+        attempt,
+        event: "workflow_dispatch".into(),
+    })
+}
+
+pub(crate) fn authenticate_preparation(
     app: &App,
     directory: &Path,
     identity: &crate::provenance::Identity,
@@ -570,6 +582,7 @@ fn restore_receipt(
 ) -> Result<()> {
     let repo = repository(app)?;
     let prefix = format!("native-receipt-{prepared_run}-{prepared_attempt}-");
+    let durable = crate::records::latest_receipt(app, prepared_run, prepared_attempt, executor)?;
     let mut found = vec![];
     for page in 1..=100 {
         let response = request(
@@ -596,13 +609,53 @@ fn restore_receipt(
         }
         ensure!(page < 100, "Receipt inventory exceeds its bound");
     }
-    found.sort_by_key(|a| a["id"].as_u64().unwrap_or(0));
-    let Some(artifact) = found.last() else {
+    // Use the same operation order for durable records and live artifacts. A late
+    // artifact upload from an older operation must not displace a newer receipt.
+    let mut found = found
+        .into_iter()
+        .map(|artifact| {
+            let name = artifact["name"].as_str().context("Receipt name missing")?;
+            crate::config::filename(name)?;
+            let (run, attempt) = name
+                .strip_prefix(&prefix)
+                .context("Receipt prefix differs")?
+                .split_once('-')
+                .context("Receipt attempt missing")?;
+            let key = (run.parse::<u64>()?, attempt.parse::<u64>()?);
+            ensure!(
+                key.0 > 0 && key.1 > 0 && artifact["workflow_run"]["id"].as_u64() == Some(key.0),
+                "Receipt artifact belongs to another operation run"
+            );
+            Ok((key, artifact))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    found.sort_by_key(|(key, _)| *key);
+    let Some(((run, attempt), artifact)) = found.last() else {
+        if let Some(selected) = &durable {
+            crate::records::restore_receipt(
+                app,
+                release,
+                prepared_run,
+                prepared_attempt,
+                selected,
+                executor,
+            )?;
+        }
         return Ok(());
     };
-    let run = artifact["workflow_run"]["id"]
-        .as_u64()
-        .context("Receipt run ID missing")?;
+    let (run, attempt) = (*run, *attempt);
+    if let Some(selected) = &durable
+        && (selected.0, selected.1) >= (run, attempt)
+    {
+        return crate::records::restore_receipt(
+            app,
+            release,
+            prepared_run,
+            prepared_attempt,
+            selected,
+            executor,
+        );
+    }
     let selected = request(
         executor,
         &app.root,
@@ -622,18 +675,6 @@ fn restore_receipt(
         .as_str()
         .context("Receipt source missing")?;
     let name = artifact["name"].as_str().unwrap();
-    crate::config::filename(name)?;
-    let suffix = name.strip_prefix(&prefix).unwrap();
-    let (named_run, named_attempt) = suffix.split_once('-').context("Receipt attempt missing")?;
-    ensure!(
-        named_run.parse::<u64>().ok() == Some(run),
-        "Receipt name belongs to another operation run"
-    );
-    let attempt = named_attempt
-        .parse::<u64>()
-        .ok()
-        .filter(|n| *n > 0)
-        .context("Receipt attempt invalid")?;
     let temp = download(app, run, name, executor)?;
     let file = temp.path().join("operation.json");
     verify_attestation(app, &file, None, source, run, attempt, executor)?;

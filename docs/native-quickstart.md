@@ -165,11 +165,40 @@ successful upstream artifacts by their exact IDs; selection verifies the success
 attempt's signed run identity. Once a preparation has been delivered, keep that
 run unchanged and dispatch a new Prepare for the next build.
 
-Native release artifacts and recovery receipts are retained for 90 days. Download
-and preserve a release directory for longer-term local management before expiry.
+Native Actions artifacts are retained for 90 days. For durable recovery, enable
+[immutable releases](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes),
+restrict the `release-publishing` environment to the `main` branch, and provide the
+existing release publisher App's `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` in
+that environment. The App needs repository Contents write, Actions read, and
+Administration read access. Generated callers pass `durable_records` from the
+`NATIVE_DURABLE_RECORDS` repository variable; set it to `true` after configuring
+these controls. Existing callers can pass `durable_records: true` and declare
+those two secrets explicitly. This is opt-in and does not change legacy callers.
+
+Preparation then saves `native-preparation-RUN-ATTEMPT` as an immutable GitHub
+prerelease containing the sealed package, GitHub attestation bundle and isolated
+SLSA proof. Completed and interrupted delivery operations save separate
+`native-receipt-PREP_RUN-PREP_ATTEMPT-OP_RUN-OP_ATTEMPT` records with their signed
+receipts. These records do not use version tags, become the latest release, or
+submit/release anything to Apple. The publisher runs in its own job with no Apple
+credentials and never builds or executes app code.
+
+`github fetch --run` prefers the durable record, reauthenticates both proofs and
+every package member, and restores the latest operation run/attempt receipt. It rejects
+conflicting tags, changed assets, mutable releases, and foreign run/IPA identities.
+Publishing resumes a matching incomplete draft without replacing any existing
+asset. An invalid durable record stops recovery rather than falling back silently.
+When no durable preparation exists, fetch uses the original Actions artifact.
+Without durable records, preserve a release directory before artifact expiry.
+Start a new operation dispatch after a later operation has run; do not rerun an
+older operation out of order. Recovery identifies operations by run ID and attempt.
 Do not delete successful preparation runs while their releases are being managed.
 After upgrading the platform pin, manage earlier releases with their original
 reviewed CLI version until the producer migration is explicitly validated.
+
+This retains the existing sealed evidence; a complete source/build-input archive,
+stable version-tag publication, and a live native publisher/recovery rehearsal
+remain migration gates. Recovery still checks the original GitHub run metadata.
 
 ## Store content and ongoing releases
 
@@ -301,6 +330,8 @@ prove the complete generator-to-delivery path; the legacy fixture is not native
 signing or Apple-delivery evidence.
 
 For consumers using the legacy release-record contract, these implementation
-gaps remain: durable immutable GitHub release records beyond Actions retention,
-and attested metadata-only updates without rebuilding the IPA. App-specific artwork
+gaps remain: a complete source/build-input archive, stable version-tag publication,
+and attested metadata-only updates without rebuilding the IPA. The opt-in durable
+preparation/receipt records also require a live publisher and interrupted-recovery
+rehearsal before cutover. App-specific artwork
 composition may continue to need its existing tooling.

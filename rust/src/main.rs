@@ -273,6 +273,20 @@ enum Store {
 }
 #[derive(Subcommand)]
 enum Github {
+    /// Publish immutable recovery evidence using a scoped publisher App token.
+    RecordPreparation {
+        #[arg(long, default_value = "build/native-preparation")]
+        directory: PathBuf,
+    },
+    /// Preserve an authenticated interrupted or completed operation beyond artifact retention.
+    RecordReceipt {
+        #[arg(long, default_value = "build/native-receipt")]
+        directory: PathBuf,
+        #[arg(long)]
+        run: u64,
+        #[arg(long)]
+        attempt: u64,
+    },
     /// Authenticate both proofs and the sealed package in the current main preparation.
     VerifyPreparation {
         #[arg(long, default_value = "build/native-preparation")]
@@ -444,6 +458,46 @@ fn run(cli: Cli) -> Result<i32> {
             println!("{}", serde_json::to_string_pretty(&value)?);
         }
         Commands::Github { action } => match action {
+            Github::RecordPreparation { directory } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"record-preparation","directory":directory,"requires":["main dispatch","both cryptographic proofs","publisher App token","immutable releases"],"overwrites":false})
+                    );
+                } else {
+                    let identity = ios_release_native::provenance::Identity::current(&app)?;
+                    let value = ios_release_native::records::record_preparation(
+                        &app,
+                        &app.root.join(directory),
+                        &identity,
+                        &mut executor,
+                    )?;
+                    println!("{}", value["html_url"]);
+                }
+            }
+            Github::RecordReceipt {
+                directory,
+                run,
+                attempt,
+            } => {
+                if cli.plan {
+                    println!(
+                        "{}",
+                        json!({"operation":"record-receipt","directory":directory,"run":run,"attempt":attempt,"requires":["authenticated durable preparation","signed matching receipt","publisher App token","immutable releases"],"overwrites":false})
+                    );
+                } else {
+                    let identity = ios_release_native::provenance::Identity::current(&app)?;
+                    let value = ios_release_native::records::record_receipt(
+                        &app,
+                        &app.root.join(directory),
+                        run,
+                        attempt,
+                        &identity,
+                        &mut executor,
+                    )?;
+                    println!("{}", value["html_url"]);
+                }
+            }
             Github::VerifyPreparation { directory, output } => {
                 if cli.plan {
                     println!(
@@ -481,7 +535,7 @@ fn run(cli: Cli) -> Result<i32> {
                 if cli.plan {
                     println!(
                         "{}",
-                        json!({"operation":"github-fetch","run":run,"output":output,"requires":"exact producer, successful main preparation, source ancestry, GitHub attestation, isolated SLSA proof, package, manifest and receipt identity"})
+                        json!({"operation":"github-fetch","run":run,"output":output,"sources":["immutable recovery record","Actions artifact when no record exists"],"requires":"exact producer, successful main preparation, source ancestry, GitHub attestation, isolated SLSA proof, package, manifest and receipt identity"})
                     );
                 } else {
                     let manifest = ios_release_native::github::fetch(

@@ -35,9 +35,12 @@ jobs:
       app_root: __APP_ROOT__
       runner: __RUNNER__
       cli_version: __CLI_VERSION__
+      durable_records: ${{ vars.NATIVE_DURABLE_RECORDS == 'true' }}
     secrets:
       IOS_RELEASE_API_KEY_ID: ${{ secrets.IOS_RELEASE_API_KEY_ID }}
       IOS_RELEASE_API_ISSUER_ID: ${{ secrets.IOS_RELEASE_API_ISSUER_ID }}
       IOS_RELEASE_API_KEY_CONTENT: ${{ secrets.IOS_RELEASE_API_KEY_CONTENT }}
       IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
       IOS_RELEASE_DEMO_PASSWORD: ${{ secrets.IOS_RELEASE_DEMO_PASSWORD }}
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
