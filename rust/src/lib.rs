@@ -1,6 +1,8 @@
+pub mod accessibility;
 pub mod api;
 pub mod archive;
 pub mod config;
+pub mod content;
 pub mod fsutil;
 pub mod github;
 pub mod images;
@@ -20,3 +22,4 @@ pub mod source;
 pub mod store;
 pub mod toolchain;
 pub mod vault;
+pub mod version;

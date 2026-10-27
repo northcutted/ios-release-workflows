@@ -148,9 +148,10 @@ pub fn run(app: &App, version: &str, number: &str, executor: &mut impl Executor)
     ensure!(candidates.len() == 1, "Expected one exported IPA");
     fs::rename(&candidates[0], &ipa)?;
     let inventory = verify(app, &ipa, version, number, executor)?;
+    let symbols_sha256 = package_symbols(app)?;
     fsutil::json(
         &report,
-        &json!({"schema_version":1,"implementation":"rust","local_archive":true,"inputs_sha256":inputs_sha256,"run_id":std::env::var("GITHUB_RUN_ID").ok(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"release_candidate":false}),
+        &json!({"schema_version":1,"implementation":"rust","local_archive":true,"inputs_sha256":inputs_sha256,"run_id":std::env::var("GITHUB_RUN_ID").ok(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_| std::env::var("GITHUB_SHA")).ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"symbols_sha256":symbols_sha256,"release_candidate":false}),
     )?;
     Ok(())
 }
@@ -417,4 +418,49 @@ pub fn verify(
         .collect();
     ensure!(found == expected, "Missing application or extension in IPA");
     Ok(inventory)
+}
+
+/// Preserve the dSYMs just checked against the IPA, including their exact bytes in the archive report.
+pub fn package_symbols(app: &App) -> Result<String> {
+    let root = app.root.join("build/application.xcarchive/dSYMs");
+    fsutil::confined(&app.root, &root)?;
+    ensure!(
+        root.is_dir() && !root.is_symlink(),
+        "Verified symbols are missing"
+    );
+    let mut pending = vec![root.clone()];
+    let mut files = Vec::new();
+    while let Some(folder) = pending.pop() {
+        for entry in fs::read_dir(folder)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            ensure!(!kind.is_symlink(), "Symbols cannot contain symlinks");
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else {
+                ensure!(kind.is_file(), "Unsupported symbol file");
+                files.push(entry.path());
+            }
+        }
+    }
+    ensure!(
+        !files.is_empty() && files.len() <= 10000,
+        "Empty or oversized symbol inventory"
+    );
+    files.sort();
+    let temp = tempfile::NamedTempFile::new_in(app.root.join("build"))?;
+    let mut writer = zip::ZipWriter::new(temp.as_file());
+    for path in files {
+        writer.start_file(
+            path.strip_prefix(&root)?
+                .to_str()
+                .context("Non-UTF8 symbol path")?,
+            zip::write::SimpleFileOptions::default(),
+        )?;
+        std::io::copy(&mut fs::File::open(path)?, &mut writer)?;
+    }
+    writer.finish()?.sync_all()?;
+    let target = app.root.join("build/symbols.zip");
+    temp.persist(&target)?;
+    fsutil::sha256(&target)
 }

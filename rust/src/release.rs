@@ -80,14 +80,31 @@ pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<
     let temporary = tempfile::tempdir_in(directory.parent().unwrap())?;
     let staged = temporary.path();
     fs::copy(&ipa, staged.join("application.ipa"))?;
-    fsutil::json(&staged.join("app.json"), &app.config)?;
+    let symbols = app.root.join("build/symbols.zip");
+    ensure!(
+        archive["symbols_sha256"].as_str() == Some(&fsutil::sha256(&symbols)?),
+        "Symbols changed after archive verification"
+    );
+    fs::copy(symbols, staged.join("symbols.zip"))?;
+    let decision = app.root.join("build/version/semantic-release.json");
+    if decision.exists() {
+        let value: Value = serde_json::from_slice(&fs::read(&decision)?)?;
+        ensure!(
+            value["version"] == version && value["source_sha"] == archive["source_sha"],
+            "Version decision differs from verified source/version"
+        );
+        fs::copy(decision, staged.join("version.json"))?;
+    }
+    let config = crate::content::snapshot(app, staged)?;
+    fsutil::json(&staged.join("app.json"), &config)?;
     fsutil::json(&staged.join("qa.json"), &qa)?;
     fsutil::json(&staged.join("archive.json"), &archive)?;
     let source = std::env::var("SOURCE_SHA")
         .or_else(|_| std::env::var("GITHUB_SHA"))
         .unwrap_or_else(|_| "local".into());
-    let manifest = json!({"schema_version":2,"verified":true,"source_sha":source,"run_id":archive["run_id"],"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"bundle_id":app.config["app_store"]["bundle_id"],"team_id":app.config["team_id"],"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&staged.join("application.ipa"))?,"config_sha256":fsutil::sha256(&staged.join("app.json"))?,"qa_sha256":fsutil::sha256(&staged.join("qa.json"))?,"archive_sha256":fsutil::sha256(&staged.join("archive.json"))?});
+    let manifest = json!({"schema_version":3,"verified":true,"source_sha":source,"run_id":archive["run_id"],"platform_revision":env!("IOS_RELEASE_BUILD_REVISION"),"bundle_id":app.config["app_store"]["bundle_id"],"team_id":app.config["team_id"],"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&staged.join("application.ipa"))?,"config_sha256":fsutil::sha256(&staged.join("app.json"))?,"qa_sha256":fsutil::sha256(&staged.join("qa.json"))?,"archive_sha256":fsutil::sha256(&staged.join("archive.json"))?});
     let mut manifest = manifest;
+    manifest["files"] = crate::content::inventory(staged)?;
     manifest["run_attempt"] = json!(std::env::var("GITHUB_RUN_ATTEMPT").ok());
     manifest["repository"] = json!(
         std::env::var("GITHUB_REPOSITORY")
@@ -195,35 +212,28 @@ pub fn verify_archive(
     app.require_archive()?;
     let ipa = app.root.join("build/application.ipa");
     let inventory = archive::verify(app, &ipa, version, number, executor)?;
+    let symbols_sha256 = archive::package_symbols(app)?;
     fsutil::json(
         &app.root.join("build/rust-archive.json"),
-        &json!({"schema_version":1,"implementation":"rust","inputs_sha256":crate::source::fingerprint(&app.root)?,"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"verified_without_build_credentials":true}),
+        &json!({"schema_version":1,"implementation":"rust","inputs_sha256":crate::source::fingerprint(&app.root)?,"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"version":version,"build_number":number,"ipa_sha256":fsutil::sha256(&ipa)?,"applications":inventory,"symbols_sha256":symbols_sha256,"verified_without_build_credentials":true}),
     )
 }
 pub fn pack(app: &App, directory: &Path, output: &Path) -> Result<()> {
-    let _validated = crate::store::Release::load(app, directory)?;
+    let validated = crate::store::Release::load(app, directory)?;
     fsutil::confined(&app.root, output)?;
     ensure!(!output.exists(), "Release package already exists");
-    let mut writer = zip::ZipWriter::new(
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(output)?,
-    );
-    for name in [
-        "application.ipa",
-        "app.json",
-        "qa.json",
-        "archive.json",
-        "release.json",
-    ] {
+    fs::create_dir_all(output.parent().context("Package needs a parent")?)?;
+    let temporary = tempfile::NamedTempFile::new_in(output.parent().unwrap())?;
+    let mut writer = zip::ZipWriter::new(temporary.as_file());
+    for name in crate::content::names(&validated.manifest)? {
         writer.start_file(
-            name,
+            &name,
             zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored),
         )?;
         std::io::copy(&mut fs::File::open(directory.join(name))?, &mut writer)?;
     }
     writer.finish()?.sync_all()?;
+    temporary.persist_noclobber(output)?;
     Ok(())
 }

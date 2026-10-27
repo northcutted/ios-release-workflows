@@ -28,7 +28,7 @@ on:
         default: ''
       version:
         type: string
-        default: '1.0.0'
+        default: ''
       build_number:
         type: string
         default: ''
@@ -58,6 +58,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          lfs: true
       - &native
         uses: $/actions/native
         with:
@@ -81,6 +83,8 @@ jobs:
       SOURCE_SHA: ${{ github.sha }}
   guard:
     name: Require protected release controls
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     if: inputs.operation != 'check'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -98,6 +102,14 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           MACOS_RUNNER: ${{ inputs.runner }}
           GH_TOKEN: ${{ github.token }}
+      - name: Validate every store input and select the release version
+        if: inputs.operation == 'prepare'
+        id: version
+        run: |
+          ios-release store validate
+          ios-release version --requested "$REQUESTED_VERSION" --github-output
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
     env: *source_env
   signing:
     name: Reconcile owned signing assets without compiling app code
@@ -110,6 +122,7 @@ jobs:
       group: native-signing-${{ github.repository }}
       cancel-in-progress: false
     outputs:
+      version: ${{ needs.guard.outputs.version }}
       number: ${{ steps.number.outputs.number }}
       artifact: ${{ steps.signing_artifact.outputs.artifact-id }}
     steps:
@@ -130,7 +143,7 @@ jobs:
           if test -n "$REQUESTED_NUMBER"; then
             number="$REQUESTED_NUMBER"
           else
-            number="$(ios-release release next-build-number).$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+            number="$(ios-release release next-build-number --github-run)"
           fi
           case "$number" in ''|*[!0-9.]*) exit 1 ;; esac
           printf 'number=%s\n' "$number" >> "$GITHUB_OUTPUT"
@@ -191,7 +204,7 @@ jobs:
         run: ios-release release build --version "$VERSION" --build-number "$BUILD_NUMBER"
         env:
           IOS_RELEASE_SIGNING_PASSWORD: ${{ secrets.IOS_RELEASE_SIGNING_PASSWORD }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.signing.outputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - id: build_artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -223,7 +236,7 @@ jobs:
       - name: Verify exported bundles, entitlements, profiles and dSYMs
         run: ios-release release verify-archive --version "$VERSION" --build-number "$BUILD_NUMBER"
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.signing.outputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - id: verify_artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -232,6 +245,7 @@ jobs:
           path: |
             ${{ inputs.app_root }}/build/application.ipa
             ${{ inputs.app_root }}/build/rust-archive.json
+            ${{ inputs.app_root }}/build/symbols.zip
           if-no-files-found: error
           retention-days: 90
     env: *source_env
@@ -262,10 +276,11 @@ jobs:
           path: ${{ inputs.app_root }}/qa-results/
       - name: Bind all successful QA to the verified binary and prepare its package
         run: |
+          ios-release version --requested "$VERSION"
           ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER"
           ios-release release pack
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.signing.outputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:

@@ -1,0 +1,130 @@
+name: Native migration rehearsal
+on:
+  workflow_call:
+    inputs:
+      platform_revision:
+        type: string
+        required: true
+      config:
+        type: string
+        default: .github/ios-release.json
+      runner:
+        type: string
+        default: xcode-27
+      screenshot_devices:
+        type: string
+        required: true
+      screenshot_scheme:
+        type: string
+        required: true
+      screenshot_target:
+        type: string
+        required: true
+      screenshot_test:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  inputs:
+    name: Native store inputs and version policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - &source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: true
+      - &native
+        uses: $/actions/native
+        with:
+          revision: ${{ inputs.platform_revision }}
+      - name: Validate the full committed store inventory and release version
+        run: |
+          mkdir -p build/native-readiness
+          jq -e --argjson expected "$SCREENSHOT_DEVICES" '.screenshot_devices == $expected' "$IOS_RELEASE_CONFIG"
+          ios-release store validate > build/native-readiness/store.json
+          ios-release version --output build/native-readiness/version.json
+        env:
+          SCREENSHOT_DEVICES: ${{ inputs.screenshot_devices }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/native-readiness/
+          if-no-files-found: error
+          retention-days: 14
+    env: &app
+      IOS_RELEASE_CONFIG: ${{ inputs.config }}
+      SOURCE_SHA: ${{ github.sha }}
+  qa:
+    name: Native QA (${{ matrix.check }})
+    runs-on: ${{ matrix.check == 'test-compatibility' && 'macos-26' || inputs.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, localization, analyze, test, test-compatibility]
+    steps:
+      - *source
+      - *native
+      - name: Install verified SwiftLint
+        if: matrix.check == 'lint'
+        run: bash "$IOS_RELEASE_NATIVE_ROOT/scripts/ci/install_swiftlint.sh"
+      - run: ios-release qa "$CHECK"
+        env:
+          CHECK: ${{ matrix.check }}
+          TEST_WORKERS: '1'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-rehearsal-qa-${{ matrix.check }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa-results/
+            build/test_output/
+            build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
+    env: *app
+  screenshots:
+    name: Native screenshots (${{ matrix.device }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(inputs.screenshot_devices) }}
+    steps:
+      - *source
+      - *native
+      - name: Capture English and Arabic on one device per runner
+        run: ios-release screenshots --scheme "$SCHEME" --test-target "$TARGET" --only-testing "$TEST" --devices "$DEVICE" --languages en-US,ar-SA
+        env:
+          SCHEME: ${{ inputs.screenshot_scheme }}
+          TARGET: ${{ inputs.screenshot_target }}
+          TEST: ${{ inputs.screenshot_test }}
+          DEVICE: ${{ matrix.device }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-rehearsal-screenshots-${{ strategy.job-index }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/rust-screenshots/
+            build/build-env.json
+          if-no-files-found: error
+          retention-days: 14
+    env: *app
+  gate:
+    name: Native rehearsal gate
+    if: always()
+    needs: [inputs, qa, screenshots]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every configured check and device
+        run: test "$INPUTS" = success && test "$QA" = success && test "$SCREENSHOTS" = success
+        env:
+          INPUTS: ${{ needs.inputs.result }}
+          QA: ${{ needs.qa.result }}
+          SCREENSHOTS: ${{ needs.screenshots.result }}

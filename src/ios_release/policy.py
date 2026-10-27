@@ -42,7 +42,7 @@ def validate(items):
                 if uses.startswith("actions/checkout@"):
                     check((step.get("with") or {}).get("persist-credentials") is False, label + ": checkout credentials must not persist")
                 check(not uses.startswith("actions/cache@"), label + ": opaque executable caches forbidden")
-            if file == "ci.yml":
+            if file in {"ci.yml", "native-readiness.yml"}:
                 check("secrets." not in body and not j.get("environment") and not permissions.get("id-token"), label + ": PR path must not receive secrets or privilege")
             if re.search(r'fastlane\.rb" (build|test|analyze)|swiftlint lint|(?:bin/ios-release"|ios-release) qa (analyze|test)|ios-release (archive|test)|ios-release apple build', scripts):
                 check(not permissions.get("id-token") and not permissions.get("attestations"), label + ": compilation must not sign provenance")
@@ -70,6 +70,11 @@ def validate(items):
     check(all(job.get("secrets") != "inherit" for job in jobs.values()), "Release secrets must remain explicitly bound")
     if "native-app.yml" in items:
         native = items["native-app.yml"]["jobs"]
+        for name in ["guard", "seal"]:
+            checkout = next(s for s in native[name]["steps"] if s.get("uses", "").startswith("actions/checkout@"))
+            check(checkout.get("with", {}).get("lfs") is True and checkout.get("with", {}).get("fetch-depth") == 0, "Native preparation requires LFS assets and complete version history")
+        check("ios-release store validate" in json.dumps(native["guard"]), "Native preparation must validate store inputs before signing")
+        check("build/symbols.zip" in json.dumps(native["verify"]), "Native verification must retain verified symbols")
         for name in ["check", "qa", "verify", "select", "guard"]:
             job = native[name]
             check(not job.get("environment") and "secrets." not in json.dumps(job) and not (job.get("permissions") or {}).get("id-token"), "native-app/" + name + ": app QA and verification must be secret-free")

@@ -141,9 +141,18 @@ In **Actions → iOS app → Run workflow**, use these operations:
 | Stage | Selects the same build and applies store metadata/screenshots without submitting it |
 | Submit | Requests App Review after the production reviewer approves |
 | Publish | Releases an approved version awaiting manual release, after production approval |
-| Metadata | Applies updated store content to the staged version |
+| Metadata | Reapplies the content sealed in that preparation to its exact staged build |
 | Phase pause/resume/complete | Manages the configured phased release after production approval |
 | Status | Reads current app/version/build state |
+
+Leave the reusable workflow's `version` input empty to select the version and notes
+from `.github/ios-version.json` and complete Git history; an explicit version remains
+available for an intentional override. `ios-release version` previews the same decision
+locally without modifying Git. Actions numbers builds as
+`(GITHUB_RUN_NUMBER + build_number_offset).GITHUB_RUN_ATTEMPT`, with Apple-compatible
+bounds. Set the app-owned offset before first use so the new workflow's number is
+higher than Apple's existing builds. A collision stops preparation rather than
+reusing a number from another preparation.
 
 Prepare shows its run ID. Use that ID for delivery and later updates. The CLI
 authenticates the successful main run, pinned producer, source ancestry, provenance
@@ -168,8 +177,19 @@ Fill the locale folders in `store/metadata`: name, description, keywords, suppor
 URL, privacy URL and release notes. Put opaque RGB PNGs in
 `store/screenshots/<locale>`. Use app-owned UI-test scenarios and the
 [native screenshot helper](../examples/OrbitNotes/UITests/IosReleaseSnapshot.swift)
-to capture new assets. Screenshot publishing preserves existing assets; remove
-superseded screenshots in App Store Connect if a device class reaches Apple's limit.
+to capture new assets. Screenshot publishing reuses existing assets with identical bytes, including assets
+uploaded by Fastlane. The default `app_store.screenshot_policy` is `preserve`.
+Set it explicitly to `replace-configured` before preparing a release to replace
+only the locale/device classes present in that preparation. Replacement records
+the previous asset inventory before deleting superseded images, resumes by checksum
+after interruption, and verifies the final order. Other device classes are untouched.
+
+Preparations seal store text, screenshots, review instructions, accessibility
+declarations and verified dSYMs alongside the IPA. Delivery verifies every file's
+SHA-256 and uses those saved inputs even when the checkout has changed. Missing
+configured locales/captures, LFS pointer files, damaged PNGs and changed packages
+stop delivery. `metadata` does not substitute later checkout content; a separately
+reviewed metadata-only package is not yet supported by this native interface.
 
 Run `ios-release store validate` to check every locale, URL and screenshot locally
 before delivery. Starter descriptions and missing required fields stop delivery.
@@ -227,3 +247,24 @@ The separate [Orbit Notes app](../examples/OrbitNotes/README.md) is an unsigned
 onboarding/screenshot fixture. Its hosted rehearsal complements the immutable
 PicStrip canaries; neither substitutes for a fresh signed archive and live Apple
 delivery validation before changing an existing app's default release path.
+
+## Migrating an existing release pipeline
+
+Use `native-readiness.yml` alongside the current release workflows first. It has no
+Apple/signing secrets and exercises store preflight, version policy, configured QA,
+and one screenshot device per runner in English and Arabic. Its gate requires every
+job; it does not prepare, upload or submit a release. The caller pins the platform
+commit and supplies app-owned screenshot scheme, target, test and device inventory.
+
+Before retiring a production pipeline, require a native signing-vault archive,
+independent verification, Apple upload/processing, exact-build staging, screenshot
+and accessibility readback, and a recovery rehearsal for interrupted operations.
+The production reviewer must still approve App Review/public-release operations.
+Unit fixtures and a signed archive do not establish live Apple delivery.
+
+For consumers using the legacy release-record contract, these are still cutover
+blockers: isolated SLSA generator and source/runtime SBOM parity, durable immutable
+GitHub release records beyond Actions retention, and attested metadata-only updates
+without rebuilding the IPA. The native package has GitHub build provenance; that
+must not be described as the legacy pipeline's isolated SLSA proof. App-specific
+artwork composition may continue to need its existing tooling.

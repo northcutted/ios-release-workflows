@@ -1,12 +1,218 @@
 {
   "info": {
     "title": "App Store Connect API",
-    "version": "4.5",
+    "version": "4.5.1",
     "x-platforms": {
       "app_store_connect_api": "App Store Connect API"
     }
   },
   "paths": {
+    "/v1/accessibilityDeclarations": {
+      "POST": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "deviceFamily": {
+                      "enum": [
+                        "IPHONE",
+                        "IPAD",
+                        "APPLE_TV",
+                        "APPLE_WATCH",
+                        "MAC",
+                        "VISION"
+                      ],
+                      "type": "string"
+                    },
+                    "supportsAudioDescriptions": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsCaptions": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsDarkInterface": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsDifferentiateWithoutColorAlone": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsLargerText": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsReducedMotion": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsSufficientContrast": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsVoiceControl": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsVoiceover": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "deviceFamily"
+                  ],
+                  "type": "object"
+                },
+                "relationships": {
+                  "properties": {
+                    "app": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "apps"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "app"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "enum": [
+                    "accessibilityDeclarations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "relationships",
+                "attributes",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/accessibilityDeclarations/{}": {
+      "DELETE": {
+        "query": [],
+        "required_query": []
+      },
+      "GET": {
+        "query": [
+          "fields[accessibilityDeclarations]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "publish": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsAudioDescriptions": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsCaptions": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsDarkInterface": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsDifferentiateWithoutColorAlone": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsLargerText": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsReducedMotion": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsSufficientContrast": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsVoiceControl": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "supportsVoiceover": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "accessibilityDeclarations"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
     "/v1/appInfoLocalizations": {
       "POST": {
         "body": {
@@ -767,6 +973,32 @@
                         "data"
                       ],
                       "type": "object"
+                    },
+                    "placements": {
+                      "properties": {
+                        "data": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "appAssetLibraryPlacements"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
                     }
                   },
                   "required": [
@@ -809,9 +1041,11 @@
           "fields[appStoreVersions]",
           "fields[appScreenshotSets]",
           "fields[appPreviewSets]",
+          "fields[appAssetLibraryPlacements]",
           "include",
           "limit[appPreviewSets]",
           "limit[appScreenshotSets]",
+          "limit[placements]",
           "limit[searchKeywords]"
         ],
         "required_query": []
@@ -1418,11 +1652,13 @@
           "fields[appScreenshotSets]",
           "fields[appPreviewSets]",
           "fields[appKeywords]",
+          "fields[appAssetLibraryPlacements]",
           "limit",
           "include",
           "limit[appScreenshotSets]",
           "limit[appPreviewSets]",
-          "limit[searchKeywords]"
+          "limit[searchKeywords]",
+          "limit[placements]"
         ],
         "required_query": []
       }
@@ -1539,6 +1775,149 @@
           "limit[promotedPurchases]",
           "limit[reviewSubmissions]",
           "limit[subscriptionGroups]"
+        ],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}": {
+      "GET": {
+        "query": [
+          "fields[apps]",
+          "fields[appEncryptionDeclarations]",
+          "fields[buildIcons]",
+          "fields[ciProducts]",
+          "fields[betaGroups]",
+          "fields[appStoreVersions]",
+          "fields[preReleaseVersions]",
+          "fields[betaAppLocalizations]",
+          "fields[builds]",
+          "fields[betaLicenseAgreements]",
+          "fields[betaAppReviewDetails]",
+          "fields[appInfos]",
+          "fields[appClips]",
+          "fields[endUserLicenseAgreements]",
+          "fields[inAppPurchases]",
+          "fields[subscriptionGroups]",
+          "fields[gameCenterEnabledVersions]",
+          "fields[appCustomProductPages]",
+          "fields[promotedPurchases]",
+          "fields[appEvents]",
+          "fields[reviewSubmissions]",
+          "fields[subscriptionGracePeriods]",
+          "fields[gameCenterDetails]",
+          "fields[appStoreVersionExperiments]",
+          "fields[androidToIosAppMappingDetails]",
+          "include",
+          "limit[androidToIosAppMappingDetails]",
+          "limit[appClips]",
+          "limit[appCustomProductPages]",
+          "limit[appEncryptionDeclarations]",
+          "limit[appEvents]",
+          "limit[appInfos]",
+          "limit[appStoreVersionExperimentsV2]",
+          "limit[appStoreVersions]",
+          "limit[betaAppLocalizations]",
+          "limit[betaGroups]",
+          "limit[builds]",
+          "limit[gameCenterEnabledVersions]",
+          "limit[inAppPurchases]",
+          "limit[inAppPurchasesV2]",
+          "limit[preReleaseVersions]",
+          "limit[promotedPurchases]",
+          "limit[reviewSubmissions]",
+          "limit[subscriptionGroups]"
+        ],
+        "required_query": []
+      },
+      "PATCH": {
+        "body": {
+          "properties": {
+            "data": {
+              "properties": {
+                "attributes": {
+                  "properties": {
+                    "accessibilityUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "bundleId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "contentRightsDeclaration": {
+                      "enum": [
+                        "DOES_NOT_USE_THIRD_PARTY_CONTENT",
+                        "USES_THIRD_PARTY_CONTENT"
+                      ],
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "primaryLocale": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "streamlinedPurchasingEnabled": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "subscriptionStatusUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subscriptionStatusUrlForSandbox": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subscriptionStatusUrlVersion": {
+                      "enum": [
+                        "V1",
+                        "V2"
+                      ],
+                      "type": "string"
+                    },
+                    "subscriptionStatusUrlVersionForSandbox": {
+                      "enum": [
+                        "V1",
+                        "V2"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "apps"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
+        },
+        "query": [],
+        "required_query": []
+      }
+    },
+    "/v1/apps/{}/accessibilityDeclarations": {
+      "GET": {
+        "query": [
+          "filter[deviceFamily]",
+          "filter[state]",
+          "fields[accessibilityDeclarations]",
+          "limit"
         ],
         "required_query": []
       }
@@ -3066,6 +3445,52 @@
               "properties": {
                 "relationships": {
                   "properties": {
+                    "appAssetLibraryImage": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appAssetLibraryImages"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "appAssetLibraryVideo": {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "appAssetLibraryVideos"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "appCustomProductPageVersion": {
                       "properties": {
                         "data": {
@@ -3612,6 +4037,8 @@
           "fields[appCustomProductPageVersions]",
           "fields[appStoreVersionExperiments]",
           "fields[appEvents]",
+          "fields[appAssetLibraryImages]",
+          "fields[appAssetLibraryVideos]",
           "fields[backgroundAssetVersions]",
           "fields[gameCenterAchievementVersions]",
           "fields[gameCenterActivityVersions]",
@@ -3629,5 +4056,5 @@
     }
   },
   "source": "https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip",
-  "spec_sha256": "b65954275e4568fa98725e517c5edb884ebd4d2fe0bbee5e44c133b2ef5feaf7"
+  "spec_sha256": "7518d3a94a8bd701ac25c1c601b95b8f53aad92091affb15a2a9d331713dac1a"
 }
