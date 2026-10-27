@@ -8,6 +8,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_native_provenance_cannot_skip_verification_publish_or_lose_proofs(self):
+        for change in ["generator", "publish", "continue", "dependency", "verify", "artifact", "bundle", "installer"]:
+            w = workflows(ROOT / ".github/workflows")
+            jobs = w["native-app.yml"]["jobs"]
+            if change == "generator": jobs["provenance"]["uses"] = "$/ .github/workflows/prepare.yml"
+            elif change == "publish": jobs["provenance"]["with"]["upload-assets"] = True
+            elif change == "continue": jobs["provenance"]["with"]["continue-on-error"] = True
+            elif change == "dependency": jobs["preparation"]["needs"] = ["seal"]
+            elif change == "verify":
+                for step in jobs["preparation"]["steps"]:
+                    if step.get("run") == "ios-release github verify-preparation": step["run"] = "true"
+            elif change == "artifact":
+                step = next(s for s in jobs["preparation"]["steps"] if "artifact-ids" in s.get("with", {}))
+                step["with"] = {"name":"latest"}
+            elif change == "bundle":
+                step = next(s for s in jobs["preparation"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+                step["with"]["path"] = "build/native-preparation/native-release.zip"
+            else:
+                jobs["select"]["steps"] = [s for s in jobs["select"]["steps"] if s.get("uses") != "$/actions/slsa-verifier"]
+            self.assertTrue(validate(w), change)
+
     def test_native_preparation_cannot_omit_bound_sboms(self):
         for omitted in ["install_syft.sh", "ios-release release sbom", "--require-sbom"]:
             w = workflows(ROOT / ".github/workflows")

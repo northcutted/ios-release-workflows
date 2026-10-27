@@ -106,6 +106,154 @@ fn selected_preparation_attempt_is_exported_without_accepting_output_injection()
         assert_eq!(fs::read(&path).unwrap(), before);
     }
 }
+
+#[test]
+fn delivery_authentication_requires_both_proofs_and_all_exact_subjects_before_output() {
+    use ios_release_native::{github, provenance};
+    struct Proofs {
+        github: Value,
+        slsa: Value,
+        fail: &'static str,
+        calls: Vec<String>,
+    }
+    impl Executor for Proofs {
+        fn run(
+            &mut self,
+            step: &Step,
+            _: &Path,
+            _: Option<&Path>,
+        ) -> Result<ios_release_native::process::Output> {
+            self.calls.push(step.program.clone());
+            let args: Vec<_> = step
+                .args
+                .iter()
+                .map(|a| match a {
+                    Arg::Text(s) => s.as_str(),
+                    _ => panic!(),
+                })
+                .collect();
+            let value = if step.program == "gh" {
+                assert!(args.contains(&"--bundle"));
+                assert!(args.contains(&"--deny-self-hosted-runners"));
+                &self.github
+            } else {
+                assert_eq!(step.program, "slsa-verifier");
+                assert!(args.contains(&provenance::BUILDER));
+                &self.slsa
+            };
+            Ok(ios_release_native::process::Output {
+                status: if step.program == self.fail { 1 } else { 0 },
+                stdout: value.to_string(),
+            })
+        }
+    }
+    for failure in [
+        "none",
+        "gh",
+        "slsa-verifier",
+        "missing-bundle",
+        "missing-slsa",
+        "subject",
+        "run",
+        "github-run",
+    ] {
+        let (_root, mut app) = app();
+        let repository = std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "owner/app".into());
+        app.config["repository"] = json!(repository);
+        app.save().unwrap();
+        let original = candidate(&app);
+        let identity = provenance::Identity {
+            repository: repository.clone(),
+            source_sha: "a".repeat(40),
+            workflow: ".github/workflows/native.yml".into(),
+            run: 42,
+            attempt: 2,
+            event: "workflow_dispatch".into(),
+        };
+        let mut manifest = original.manifest;
+        // Bind the fixture's local evidence to one deterministic hosted identity.
+        for (file, hash_key) in [("archive.json", "archive_sha256"), ("qa.json", "qa_sha256")] {
+            let path = original.directory.join(file);
+            let mut value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            if file == "qa.json" {
+                for result in value.as_object_mut().unwrap().values_mut() {
+                    result["source_sha"] = json!(identity.source_sha);
+                    result["run_id"] = json!("42");
+                }
+            } else {
+                value["source_sha"] = json!(identity.source_sha);
+                value["run_id"] = json!("42");
+            }
+            fsutil::json(&path, &value).unwrap();
+            manifest[hash_key] = json!(fsutil::sha256(&path).unwrap());
+            manifest["files"][file] = manifest[hash_key].clone();
+        }
+        manifest["source_sha"] = json!(identity.source_sha);
+        manifest["source_workflow"] = json!(identity.workflow);
+        manifest["run_id"] = json!("42");
+        manifest["run_attempt"] = json!("2");
+        fsutil::json(&original.directory.join("release.json"), &manifest).unwrap();
+        let directory = app.root.join("build/native-preparation");
+        fs::create_dir(&directory).unwrap();
+        let package = directory.join("native-release.zip");
+        release::pack(&app, &original.directory, &package).unwrap();
+        let output_file = app.root.join("build/github-output");
+        fs::write(&output_file, b"existing=value\n").unwrap();
+        let encoded =
+            provenance::subjects(&app, &original.directory, &package, Some(&output_file)).unwrap();
+        let subjects = provenance::hashes(&original.directory, &package).unwrap();
+        let decoded = String::from_utf8(STANDARD.decode(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded.lines().count(), 3);
+        assert!(decoded.contains(&format!(
+            "{}  native-release.zip",
+            subjects["native-release.zip"]
+        )));
+        let invocation = format!("https://github.com/{repository}/actions/runs/42/attempts/2");
+        let mut proofs = Proofs {
+            fail: failure,
+            calls: vec![],
+            github: json!([{"verificationResult":{"signature":{"certificate":{"runInvocationURI":invocation}},"statement":{"predicate":{"runDetails":{"metadata":{"invocationId":invocation}}}}}}]),
+            slsa: json!({"_type":"https://in-toto.io/Statement/v0.1","predicateType":"https://slsa.dev/provenance/v0.2",
+                "subject":subjects.iter().map(|(name, hash)| json!({"name":name,"digest":{"sha256":hash}})).collect::<Vec<_>>(),
+                "predicate":{"builder":{"id":provenance::BUILDER},"buildType":"https://github.com/slsa-framework/slsa-github-generator/generic@v1",
+                    "invocation":{"configSource":{"uri":format!("git+https://github.com/{repository}@refs/heads/main"),"digest":{"sha1":identity.source_sha},"entryPoint":identity.workflow},
+                        "environment":{"github_run_id":"42","github_run_attempt":"2","github_event_name":"workflow_dispatch","github_ref":"refs/heads/main"}}}}),
+        };
+        for name in [provenance::BUNDLE, provenance::PROOF] {
+            fs::write(directory.join(name), b"opaque signed fixture").unwrap();
+        }
+        match failure {
+            "missing-bundle" => {
+                fs::remove_file(directory.join(provenance::BUNDLE)).unwrap();
+            }
+            "missing-slsa" => {
+                fs::remove_file(directory.join(provenance::PROOF)).unwrap();
+            }
+            "subject" => proofs.slsa["subject"][0]["digest"]["sha256"] = json!("f".repeat(64)),
+            "run" => {
+                proofs.slsa["predicate"]["invocation"]["environment"]["github_run_id"] = json!("43")
+            }
+            "github-run" => {
+                proofs.github[0]["verificationResult"]["signature"]["certificate"]["runInvocationURI"] =
+                    json!("https://github.com/other/app/actions/runs/42/attempts/2")
+            }
+            _ => {}
+        }
+        let output = app.root.join("build/authenticated");
+        let result = github::verify_preparation(&app, &directory, &output, &identity, &mut proofs);
+        if failure == "none" {
+            assert_eq!(result.unwrap(), manifest);
+            store::Release::load(&app, &output).unwrap();
+            assert_eq!(proofs.calls, ["gh", "slsa-verifier"]);
+        } else {
+            assert!(result.is_err(), "{failure}");
+            assert!(!output.exists(), "{failure}");
+        }
+        if matches!(failure, "gh" | "github-run" | "missing-bundle") {
+            assert!(!proofs.calls.iter().any(|c| c == "slsa-verifier"));
+        }
+    }
+}
 fn local_metadata(app: &App, locale: &str) {
     let folder = app.path("metadata_path").unwrap().join(locale);
     for (file, value) in [

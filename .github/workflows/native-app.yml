@@ -252,6 +252,9 @@ jobs:
   seal:
     name: Seal and attest the verified release without compiling app code
     needs: [verify, qa, signing]
+    outputs:
+      artifact: ${{ steps.sealed_artifact.outputs.artifact-id }}
+      subjects: ${{ steps.subjects.outputs.subjects }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -287,12 +290,73 @@ jobs:
           VERSION: ${{ needs.signing.outputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        id: attestation
         with:
           subject-path: ${{ inputs.app_root }}/build/native-release.zip
+      - name: Retain the signed GitHub bundle for later verification
+        run: cp "$BUNDLE" "$IOS_APP_ROOT/build/build-attestation.jsonl"
+        env:
+          BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
+      - name: Hash the exact package, manifest and IPA for isolated provenance
+        id: subjects
+        run: ios-release release subjects --github-output
+      - id: sealed_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-sealed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ inputs.app_root }}/build/native-release.zip
+            ${{ inputs.app_root }}/build/build-attestation.jsonl
+          if-no-files-found: error
+          retention-days: 90
+    env: *source_env
+  provenance:
+    name: Generate isolated native release provenance
+    needs: seal
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.seal.outputs.subjects }}
+      upload-assets: false
+      provenance-name: native-provenance-${{ github.run_id }}-${{ github.run_attempt }}.intoto.jsonl
+  preparation:
+    name: Authenticate both proofs before exposing a deliverable preparation
+    needs: [seal, provenance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - *checkout
+      - *native
+      - &slsa_verifier
+        uses: $/actions/slsa-verifier
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.seal.outputs.artifact }}
+          merge-multiple: true
+          path: ${{ inputs.app_root }}/build/native-preparation/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+          path: ${{ inputs.app_root }}/build/native-preparation/
+      - name: Normalize the attempt-specific proof filename
+        run: mv "$IOS_APP_ROOT/build/native-preparation/native-provenance-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.intoto.jsonl" "$IOS_APP_ROOT/build/native-preparation/provenance.intoto.jsonl"
+      - name: Verify signatures, producer, source, run, attempt and all three subjects
+        run: ios-release github verify-preparation
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-release-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ inputs.app_root }}/build/native-release.zip
+          path: |
+            ${{ inputs.app_root }}/build/native-preparation/native-release.zip
+            ${{ inputs.app_root }}/build/native-preparation/build-attestation.jsonl
+            ${{ inputs.app_root }}/build/native-preparation/provenance.intoto.jsonl
           if-no-files-found: error
           retention-days: 90
       - name: Explain next steps
@@ -312,6 +376,7 @@ jobs:
     steps:
       - *checkout
       - *native
+      - *slsa_verifier
       - name: Authenticate selected source, attestation and exact IPA
         id: selection
         run: ios-release github fetch --run "$RELEASE_RUN" --github-output
@@ -335,6 +400,7 @@ jobs:
     steps: &delivery_steps
       - *checkout
       - *native
+      - *slsa_verifier
       - name: Reauthenticate preparation and restore the latest verified operation receipt
         run: ios-release github fetch --run "$RELEASE_RUN"
         env:

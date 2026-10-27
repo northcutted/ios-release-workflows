@@ -324,39 +324,46 @@ pub fn validate_run<'a>(value: &'a Value, repo: &str, run: u64) -> Result<&'a st
 fn verify_attestation(
     app: &App,
     file: &Path,
+    bundle: Option<&Path>,
     source: &str,
     run: u64,
     attempt: u64,
     executor: &mut impl Executor,
 ) -> Result<()> {
     let repo = repository(app)?;
-    let raw = checked(
-        executor,
-        &Step::new(
-            "gh",
-            [
-                "attestation",
-                "verify",
-                file.to_str().context("Invalid artifact path")?,
-                "--repo",
-                repo,
-                "--signer-workflow",
-                "northcutted/ios-release-workflows/.github/workflows/native-app.yml",
-                "--signer-digest",
-                env!("IOS_RELEASE_BUILD_REVISION"),
-                "--source-digest",
-                source,
-                "--source-ref",
-                "refs/heads/main",
-                "--deny-self-hosted-runners",
-                "--format",
-                "json",
-            ],
-            180,
-        )
-        .github(),
-        &app.root,
-    )?;
+    let mut args: Vec<String> = vec![
+        "attestation".into(),
+        "verify".into(),
+        file.to_str().context("Invalid artifact path")?.into(),
+        "--repo".into(),
+        repo.into(),
+        "--signer-workflow".into(),
+        "northcutted/ios-release-workflows/.github/workflows/native-app.yml".into(),
+        "--signer-digest".into(),
+        env!("IOS_RELEASE_BUILD_REVISION").into(),
+        "--source-digest".into(),
+        source.into(),
+        "--source-ref".into(),
+        "refs/heads/main".into(),
+        "--deny-self-hosted-runners".into(),
+        "--predicate-type".into(),
+        "https://slsa.dev/provenance/v1".into(),
+        "--format".into(),
+        "json".into(),
+    ];
+    if let Some(bundle) = bundle {
+        ensure!(
+            bundle.is_file()
+                && !bundle.is_symlink()
+                && fs::metadata(bundle)?.len() <= 2 * 1024 * 1024,
+            "GitHub attestation bundle is missing, unsafe or oversized"
+        );
+        args.extend([
+            "--bundle".into(),
+            bundle.to_str().context("Invalid attestation path")?.into(),
+        ]);
+    }
+    let raw = checked(executor, &Step::new("gh", args, 180).github(), &app.root)?;
     let result: Value = serde_json::from_str(&raw)?;
     validate_invocation(&result, repo, run, attempt)
 }
@@ -457,39 +464,92 @@ pub fn fetch(app: &App, run: u64, output: &Path, executor: &mut impl Executor) -
         &format!("native-release-{run}-{attempt}"),
         executor,
     )?;
-    let package = temp.path().join("native-release.zip");
-    ensure!(package.is_file(), "Preparation package missing");
-    verify_attestation(app, &package, source, run, attempt, executor)?;
+    let identity = crate::provenance::Identity {
+        repository: repository(app)?.into(),
+        source_sha: source.into(),
+        workflow: selected["path"]
+            .as_str()
+            .context("Selected workflow path missing")?
+            .into(),
+        run,
+        attempt,
+        event: "workflow_dispatch".into(),
+    };
     fsutil::confined(&app.root, output)?;
     ensure!(
         !output.exists(),
         "Release directory already exists; resume its saved receipt instead"
     );
-    fs::create_dir_all(output.parent().context("Output needs a parent")?)?;
-    let stage = tempfile::tempdir_in(output.parent().unwrap())?;
-    let extracted = stage.path().join("release");
-    crate::content::unpack(app, &package, &extracted)?;
-    let mut release = crate::store::Release::load(app, &extracted)?;
-    ensure!(
-        release.manifest["source_sha"] == source
-            && release.manifest["run_id"]
-                .as_str()
-                .and_then(|s| s.parse::<u64>().ok())
-                == Some(run)
-            && release.manifest["run_attempt"]
-                .as_str()
-                .and_then(|s| s.parse::<u64>().ok())
-                == Some(attempt)
-            && release.manifest["repository"] == repository(app)?
-            && release.manifest["platform_revision"] == env!("IOS_RELEASE_BUILD_REVISION"),
-        "Preparation manifest identity differs from authenticated producer"
-    );
+    let (_stage, mut release) = authenticate_preparation(app, temp.path(), &identity, executor)?;
     restore_receipt(app, run, attempt, &mut release, executor)?;
     let manifest = release.manifest.clone();
-    drop(release);
-    fs::rename(&extracted, output)?;
+    fs::create_dir_all(output.parent().context("Output needs a parent")?)?;
+    fs::rename(&release.directory, output)?;
     println!("Authenticated preparation {run} at {}", output.display());
     Ok(manifest)
+}
+
+fn authenticate_preparation(
+    app: &App,
+    directory: &Path,
+    identity: &crate::provenance::Identity,
+    executor: &mut impl Executor,
+) -> Result<(tempfile::TempDir, crate::store::Release)> {
+    identity.validate()?;
+    ensure!(
+        identity.repository == repository(app)? && identity.event == "workflow_dispatch",
+        "Native preparation must be dispatched from this repository"
+    );
+    let package = directory.join("native-release.zip");
+    ensure!(
+        package.is_file() && !package.is_symlink(),
+        "Preparation package missing or unsafe"
+    );
+    verify_attestation(
+        app,
+        &package,
+        Some(&directory.join(crate::provenance::BUNDLE)),
+        &identity.source_sha,
+        identity.run,
+        identity.attempt,
+        executor,
+    )?;
+    let statement = crate::provenance::verify(
+        &package,
+        &directory.join(crate::provenance::PROOF),
+        identity,
+        &app.root,
+        executor,
+    )?;
+    let build = app.root.join("build");
+    fsutil::confined(&app.root, &build)?;
+    fs::create_dir_all(&build)?;
+    let stage = tempfile::tempdir_in(build)?;
+    let extracted = stage.path().join("release");
+    crate::content::unpack(app, &package, &extracted)?;
+    let release = crate::store::Release::load(app, &extracted)?;
+    crate::provenance::validate_manifest(&release.manifest, identity)?;
+    crate::provenance::validate_subjects(
+        &statement,
+        &crate::provenance::hashes(&extracted, &package)?,
+    )?;
+    Ok((stage, release))
+}
+
+pub fn verify_preparation(
+    app: &App,
+    directory: &Path,
+    output: &Path,
+    identity: &crate::provenance::Identity,
+    executor: &mut impl Executor,
+) -> Result<Value> {
+    fsutil::confined(&app.root, directory)?;
+    fsutil::confined(&app.root, output)?;
+    ensure!(!output.exists(), "Verified release output already exists");
+    let (_stage, release) = authenticate_preparation(app, directory, identity, executor)?;
+    fs::create_dir_all(output.parent().context("Output needs a parent")?)?;
+    fs::rename(&release.directory, output)?;
+    Ok(release.manifest)
 }
 pub fn selection_output(manifest: &Value, path: &Path) -> Result<()> {
     let attempt = manifest["run_attempt"]
@@ -576,7 +636,7 @@ fn restore_receipt(
         .context("Receipt attempt invalid")?;
     let temp = download(app, run, name, executor)?;
     let file = temp.path().join("operation.json");
-    verify_attestation(app, &file, source, run, attempt, executor)?;
+    verify_attestation(app, &file, None, source, run, attempt, executor)?;
     let value: Value = serde_json::from_slice(&fs::read(&file)?)?;
     ensure!(
         value["identity"] == release.receipt["identity"],

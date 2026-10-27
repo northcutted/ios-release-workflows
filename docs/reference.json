@@ -589,6 +589,42 @@
           "secret_names": []
         },
         {
+          "id": "provenance",
+          "name": "Generate isolated native release provenance",
+          "needs": [
+            "seal"
+          ],
+          "condition": null,
+          "runner": null,
+          "uses": "slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0",
+          "environment": null,
+          "timeout_minutes": null,
+          "permissions": {
+            "actions": "read",
+            "contents": "write",
+            "id-token": "write"
+          },
+          "secret_names": []
+        },
+        {
+          "id": "preparation",
+          "name": "Authenticate both proofs before exposing a deliverable preparation",
+          "needs": [
+            "seal",
+            "provenance"
+          ],
+          "condition": null,
+          "runner": "ubuntu-24.04",
+          "uses": null,
+          "environment": null,
+          "timeout_minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "secret_names": []
+        },
+        {
           "id": "select",
           "name": "Authenticate the exact preparation before requesting Apple credentials",
           "needs": [
@@ -759,7 +795,7 @@
           "environment": null,
           "timeout_minutes": null,
           "permissions": {
-            "contents": "read",
+            "contents": "write",
             "actions": "read",
             "id-token": "write",
             "attestations": "write",

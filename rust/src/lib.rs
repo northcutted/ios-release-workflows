@@ -11,6 +11,7 @@ pub mod metadata;
 pub mod onboarding;
 pub mod process;
 pub mod project;
+pub mod provenance;
 pub mod qa;
 pub mod release;
 pub mod results;

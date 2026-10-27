@@ -42,6 +42,13 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: rust
         run: cargo test --locked --test sbom syft_scans_real_source_and_ipa -- --ignored
+      - name: Install reviewed verifier for the signed PicStrip fixture
+        if: runner.os == 'Linux'
+        uses: $/actions/slsa-verifier
+      - name: Verify real isolated provenance and reject altered bytes and run identity
+        if: runner.os == 'Linux'
+        working-directory: rust
+        run: cargo test --locked --test provenance verifies_real_picstrip_provenance_and_rejects_tampered_bytes -- --ignored
       - name: Package the tested binary
         working-directory: rust
         run: |

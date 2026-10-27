@@ -277,9 +277,30 @@ Older packages remain readable. A failed scan clears stale SBOM evidence, and a
 changed source, IPA, archive or document requires regeneration. The scan does not
 replace independent signature verification or establish isolated build provenance.
 
-For consumers using the legacy release-record contract, these are still cutover
-blockers: isolated SLSA generator parity, durable immutable
-GitHub release records beyond Actions retention, and attested metadata-only updates
-without rebuilding the IPA. The native package has GitHub build provenance; that
-must not be described as the legacy pipeline's isolated SLSA proof. App-specific
-artwork composition may continue to need its existing tooling.
+Native preparation now also invokes the same [isolated SLSA generator](https://github.com/slsa-framework/slsa-github-generator/blob/v2.1.0/.github/workflows/generator_generic_slsa3.yml)
+as the legacy pipeline. Its three subjects are the sealed package, `release.json`
+and exact IPA. A separate job verifies both the retained GitHub attestation bundle
+and isolated proof before publishing `native-release-RUN-ATTEMPT`. Selection and
+delivery reverify both signatures, the reviewed platform revision, source commit,
+consumer workflow, run/attempt, and all three hashes before restoring a receipt.
+Missing or mismatched proof stops delivery. Local verification uses `gh` and
+`slsa-verifier`; native Actions installs the reviewed verifier automatically.
+
+The generated caller grants the maximum permissions required by the upstream
+generator's reusable contract, including `contents: write`. Native QA, build,
+selection and delivery jobs explicitly restrict their tokens to read access. The
+generator has `upload-assets: false`, receives no Apple/signing secrets, and does
+not publish a GitHub release. Existing native callers need this permission update
+when adopting the new platform pin. Retry the entire preparation after a failed
+prepare attempt; proofs from different attempts cannot be combined. Delivery can
+still resume its authenticated operation receipt without rebuilding.
+
+CI verifies a real signed legacy PicStrip manifest and tests altered bytes,
+identities and missing proofs. A new native main-branch preparation must still
+prove the complete generator-to-delivery path; the legacy fixture is not native
+signing or Apple-delivery evidence.
+
+For consumers using the legacy release-record contract, these implementation
+gaps remain: durable immutable GitHub release records beyond Actions retention,
+and attested metadata-only updates without rebuilding the IPA. App-specific artwork
+composition may continue to need its existing tooling.

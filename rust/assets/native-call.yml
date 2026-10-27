@@ -20,7 +20,8 @@ permissions:
 jobs:
   app:
     permissions:
-      contents: read
+      # Required by the isolated generator's reusable contract; native app jobs remain read-only.
+      contents: write
       actions: read
       id-token: write
       attestations: write
