@@ -38,6 +38,7 @@ jobs:
             examples/OrbitNotes/.ios-release.json
             examples/OrbitNotes/qa-results/
             examples/OrbitNotes/build/build-env.json
+            examples/OrbitNotes/build/toolchain/
           if-no-files-found: error
           retention-days: 14
   screenshots:

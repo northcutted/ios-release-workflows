@@ -187,6 +187,7 @@ struct Fake {
     status: i32,
     boot_status: i32,
     malformed: bool,
+    inventory_statuses: std::collections::VecDeque<i32>,
 }
 impl Fake {
     fn new(status: i32) -> Self {
@@ -195,6 +196,7 @@ impl Fake {
             status,
             boot_status: 0,
             malformed: false,
+            inventory_statuses: Default::default(),
         }
     }
 }
@@ -215,7 +217,7 @@ impl Executor for Fake {
             "xcrun" if arguments[0] == "--sdk" => (0, "27.0".into()),
             "xcrun" if arguments[0] == "swift" => (0, "Swift 6".into()),
             "xcrun" if arguments.get(1).map(String::as_str) == Some("list") => (
-                0,
+                self.inventory_statuses.pop_front().unwrap_or(0),
                 json!({"devices":{RUNTIME:[{"name":"iPhone 17","udid":ID,"isAvailable":true}]}})
                     .to_string(),
             ),
@@ -748,4 +750,74 @@ fn legacy_capture_refuses_local_execution_before_launching_tools() {
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("disposable GitHub-hosted runner"));
     assert!(!app.root.join("build").exists());
+}
+
+#[test]
+fn cold_simulator_inventory_can_retry_one_timeout_without_changing_the_selected_runtime() {
+    let (_root, app) = fixture();
+    let mut fake = Fake::new(0);
+    fake.inventory_statuses = [124, 0].into();
+    let selected = toolchain::resolve(&app, false, &["iPhone 17".into()], &mut fake).unwrap();
+    assert_eq!(selected.devices["iPhone 17"], ID);
+    let calls = fake
+        .calls
+        .iter()
+        .filter(|s| args(s).get(1).map(String::as_str) == Some("list"))
+        .collect::<Vec<_>>();
+    assert_eq!(calls.len(), 2);
+    assert!(calls.iter().all(|s| s.timeout_seconds == 120
+        && s.env["DEVELOPER_DIR"] == app.config["xcode"]["path"].as_str().unwrap()));
+    let evidence: Value =
+        serde_json::from_slice(&fs::read(app.root.join("build/toolchain/primary.json")).unwrap())
+            .unwrap();
+    let inventory = evidence["probes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["command"]["args"][1] == "list")
+        .collect::<Vec<_>>();
+    assert_eq!(inventory[0]["status"], 124);
+    assert_eq!(inventory[1]["status"], 0);
+}
+#[test]
+fn discovery_failures_are_bounded_retained_and_cannot_produce_passing_qa() {
+    for statuses in [vec![124, 124], vec![1], vec![65]] {
+        let (_root, app) = fixture();
+        let mut fake = Fake::new(0);
+        fake.inventory_statuses = statuses.clone().into();
+        fsutil::atomic(
+            &app.root.join("qa-results/test/report.junit"),
+            b"stale passing report",
+        )
+        .unwrap();
+        fsutil::json(
+            &app.root.join("build/build-env.json"),
+            &json!({"stale":true}),
+        )
+        .unwrap();
+        assert_eq!(qa::run(&app, "test", &mut fake).unwrap(), 1);
+        assert!(!app.root.join("qa-results/test/report.junit").exists());
+        assert!(!app.root.join("build/build-env.json").exists());
+        assert!(
+            !fake
+                .calls
+                .iter()
+                .any(|s| s.program == "xcodebuild" && args(s).contains(&"test".into()))
+        );
+        assert_eq!(
+            fake.calls
+                .iter()
+                .filter(|s| args(s).get(1).map(String::as_str) == Some("list"))
+                .count(),
+            statuses.len()
+        );
+        let evidence: Value = serde_json::from_slice(
+            &fs::read(app.root.join("qa-results/test/toolchain.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            evidence["probes"].as_array().unwrap().last().unwrap()["status"],
+            *statuses.last().unwrap()
+        );
+    }
 }

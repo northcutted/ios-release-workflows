@@ -105,6 +105,7 @@ jobs:
             consumer/qa-results/
             consumer/build/test_output/
             consumer/build/build-env.json
+            consumer/build/toolchain/
           if-no-files-found: error
           retention-days: 14
   qa-evidence:
@@ -186,6 +187,7 @@ jobs:
           path: |
             consumer/build/rust-screenshots/
             consumer/build/build-env.json
+            consumer/build/toolchain/
           if-no-files-found: error
           retention-days: 14
   store-inputs:

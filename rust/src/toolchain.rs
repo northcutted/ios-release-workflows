@@ -1,10 +1,11 @@
 use crate::{
     config::App,
-    process::{Executor, Step, checked},
+    fsutil,
+    process::{Executor, Step},
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path, time::Instant};
 
 #[derive(Debug, Clone)]
 pub struct Resolved {
@@ -24,10 +25,27 @@ pub fn resolve(
         .as_str()
         .context("Missing Xcode path")?
         .to_owned();
-    let invoke = |program: &str, args: &[&str]| {
-        Step::new(program, args.iter().copied(), 30).developer(&developer)
+    let diagnostics = app.root.join("build/toolchain").join(if compatibility {
+        "compatibility.json"
+    } else {
+        "primary.json"
+    });
+    fsutil::confined(&app.root, &diagnostics)?;
+    let mut attempts = vec![];
+    fsutil::json(&diagnostics, &json!({"probes":attempts}))?;
+    let mut inspect = |program: &str, args: &[&str]| {
+        // First use of another Xcode can start CoreSimulator and populate xcrun caches.
+        // Only the read-only simulator inventory may retry a timeout; never retry app tests here.
+        let inventory = args == ["simctl", "list", "devices", "available", "--json"];
+        let step = Step::new(
+            program,
+            args.iter().copied(),
+            if inventory { 120 } else { 60 },
+        )
+        .developer(&developer);
+        probe(app, &step, inventory, &diagnostics, &mut attempts, executor)
     };
-    let version = checked(executor, &invoke("xcodebuild", &["-version"]), &app.root)?;
+    let version = inspect("xcodebuild", &["-version"])?;
     ensure!(
         version.lines().collect::<Vec<_>>()
             == [
@@ -44,11 +62,7 @@ pub fn resolve(
             ],
         "Installed Xcode differs from the configured version/build"
     );
-    let sdk = checked(
-        executor,
-        &invoke("xcrun", &["--sdk", "iphoneos", "--show-sdk-version"]),
-        &app.root,
-    )?;
+    let sdk = inspect("xcrun", &["--sdk", "iphoneos", "--show-sdk-version"])?;
     ensure!(
         Some(sdk.as_str()) == expected["sdk"].as_str(),
         "Installed iPhoneOS SDK differs from configuration"
@@ -63,27 +77,15 @@ pub fn resolve(
     let devices = if names.is_empty() {
         BTreeMap::new()
     } else {
-        let inventory: Value = serde_json::from_str(&checked(
-            executor,
-            &invoke(
-                "xcrun",
-                &["simctl", "list", "devices", "available", "--json"],
-            ),
-            &app.root,
+        let inventory: Value = serde_json::from_str(&inspect(
+            "xcrun",
+            &["simctl", "list", "devices", "available", "--json"],
         )?)?;
         resolve_inventory(&inventory, &runtime, names)?
     };
-    let swift = checked(
-        executor,
-        &invoke("xcrun", &["swift", "--version"]),
-        &app.root,
-    )?;
-    let macos = checked(
-        executor,
-        &Step::new("sw_vers", ["-productVersion"], 30),
-        &app.root,
-    )?;
-    let architecture = checked(executor, &Step::new("uname", ["-m"], 30), &app.root)?;
+    let swift = inspect("xcrun", &["swift", "--version"])?;
+    let macos = inspect("sw_vers", &["-productVersion"])?;
+    let architecture = inspect("uname", &["-m"])?;
     let mut evidence = expected.clone();
     evidence["sdk"] = json!(sdk);
     evidence["swift"] = json!(swift);
@@ -134,4 +136,51 @@ pub fn resolve_inventory(
         );
     }
     Ok(result)
+}
+
+fn probe(
+    app: &App,
+    step: &Step,
+    retry_timeout: bool,
+    diagnostics: &Path,
+    attempts: &mut Vec<Value>,
+    executor: &mut impl Executor,
+) -> Result<String> {
+    let command = serde_json::to_value(step)?;
+    for attempt in 1..=2 {
+        let started = Instant::now();
+        let result = executor.run(step, &app.root, None);
+        let record = match &result {
+            Ok(output) => {
+                json!({"command":command,"attempt":attempt,"elapsed_seconds":started.elapsed().as_secs_f64(),"status":output.status,"stdout":output.stdout})
+            }
+            Err(error) => {
+                json!({"command":command,"attempt":attempt,"elapsed_seconds":started.elapsed().as_secs_f64(),"error":error.to_string()})
+            }
+        };
+        attempts.push(record);
+        fsutil::json(diagnostics, &json!({"probes":attempts}))?;
+        let output = result.with_context(|| {
+            format!(
+                "Toolchain query {command} failed; see {}",
+                diagnostics.display()
+            )
+        })?;
+        if output.status == 124 && retry_timeout && attempt == 1 {
+            eprintln!(
+                "Simulator inventory timed out after {} seconds; retrying once. Diagnostics: {}",
+                step.timeout_seconds,
+                diagnostics.display()
+            );
+            continue;
+        }
+        ensure!(
+            output.status == 0,
+            "Toolchain query {command} exited {}; see {}",
+            output.status,
+            diagnostics.display()
+        );
+        return Ok(output.stdout.trim().to_owned());
+    }
+    unreachable!("The second probe always returns")
 }
