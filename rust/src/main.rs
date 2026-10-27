@@ -184,6 +184,8 @@ enum Signing {
 }
 #[derive(Subcommand)]
 enum Release {
+    /// Inventory source dependencies and the independently verified IPA using reviewed Syft.
+    Sbom,
     Build {
         #[arg(long)]
         version: String,
@@ -219,6 +221,9 @@ enum Release {
         build_number: String,
         #[arg(long, default_value = "build/native-release")]
         output: PathBuf,
+        /// Require source/runtime SBOMs bound to this independently verified archive.
+        #[arg(long)]
+        require_sbom: bool,
     },
     NextBuildNumber {
         /// Use the monotonic Actions run number plus build_number_offset; reject collisions.
@@ -500,6 +505,13 @@ fn run(cli: Cli) -> Result<i32> {
         }
         Commands::Release { action } => {
             if cli.plan {
+                if matches!(action, Release::Sbom) {
+                    println!(
+                        "{}",
+                        json!({"operation":"release-sbom","steps":["verify source and IPA against archive evidence","scan source and IPA with reviewed Syft","bind runtime inventory and SBOM hashes to the archive"],"output":"build/sbom","executes_app_code":false})
+                    );
+                    return Ok(0);
+                }
                 println!(
                     "{}",
                     json!({"operation":"release","steps":["QA","isolated signing installation","archive and validation","seal exact release identity"],"archive_configuration":app.configuration("archive")})
@@ -532,6 +544,7 @@ fn run(cli: Cli) -> Result<i32> {
                     version,
                     build_number,
                     output,
+                    require_sbom,
                 } => {
                     println!(
                         "{}",
@@ -539,7 +552,8 @@ fn run(cli: Cli) -> Result<i32> {
                             &app,
                             &version,
                             &build_number,
-                            &app.root.join(output)
+                            &app.root.join(output),
+                            require_sbom
                         )?)?
                     );
                 }
@@ -556,6 +570,15 @@ fn run(cli: Cli) -> Result<i32> {
                         minimum
                     };
                     println!("{number}")
+                }
+                Release::Sbom => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&ios_release_native::sbom::generate(
+                            &app,
+                            &mut executor
+                        )?)?
+                    );
                 }
                 Release::Build {
                     version,

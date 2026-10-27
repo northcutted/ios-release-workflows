@@ -194,6 +194,13 @@ impl Release {
         }
         let qa: Value = serde_json::from_slice(&std::fs::read(directory.join("qa.json"))?)?;
         let sealed_app = App::load(&directory, Path::new("app.json"))?;
+        if manifest["files"].get("sbom.json").is_some() {
+            crate::sbom::verify(
+                &directory,
+                &directory.join("archive.json"),
+                crate::github::repository(&sealed_app)?,
+            )?;
+        }
         crate::release::validate_inventory(&sealed_app, &archived)?;
         ensure!(
             sealed_app.config["team_id"] == manifest["team_id"]

@@ -46,7 +46,13 @@ pub fn verify_qa(app: &App) -> Result<Value> {
     }
     Ok(results)
 }
-pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<Value> {
+pub fn seal(
+    app: &App,
+    version: &str,
+    number: &str,
+    directory: &Path,
+    require_sbom: bool,
+) -> Result<Value> {
     app.require_archive()?;
     let qa = verify_qa(app)?;
     let archive: Value =
@@ -86,6 +92,9 @@ pub fn seal(app: &App, version: &str, number: &str, directory: &Path) -> Result<
         "Symbols changed after archive verification"
     );
     fs::copy(symbols, staged.join("symbols.zip"))?;
+    if require_sbom || app.root.join("build/sbom").exists() {
+        crate::sbom::attach(app, staged)?;
+    }
     let decision = app.root.join("build/version/semantic-release.json");
     if decision.exists() {
         let value: Value = serde_json::from_slice(&fs::read(&decision)?)?;
@@ -181,7 +190,7 @@ pub fn prepare(
     }
     build(app, version, number, executor, managed)?;
     let directory = app.root.join("build/native-release");
-    let value = seal(app, version, number, &directory)?;
+    let value = seal(app, version, number, &directory, false)?;
     println!(
         "Release prepared at {}. Next: ios-release store upload --release {}, then store wait and store stage.",
         directory.display(),

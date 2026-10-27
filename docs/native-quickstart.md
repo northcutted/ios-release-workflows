@@ -262,8 +262,23 @@ and accessibility readback, and a recovery rehearsal for interrupted operations.
 The production reviewer must still approve App Review/public-release operations.
 Unit fixtures and a signed archive do not establish live Apple delivery.
 
+Native Actions generates separate source and shipped-runtime SPDX 2.3 SBOMs with
+reviewed Syft 1.44.0 before sealing. Rust inventories the exact IPA, checks bundle
+executables against independent archive verification, and records embedded
+frameworks/dylibs and consumer-declared dependencies without inferring licenses.
+The package retains both documents and their source/archive/hash binding. Runtime
+augmentation is compared with the deployed Python contract, and a real Syft fixture
+checks that source build dependencies do not become shipped-runtime claims.
+
+For a local preparation, install the reviewed Syft version and run
+`ios-release release sbom` after archive verification, then seal with
+`ios-release release seal --version VERSION --build-number NUMBER --require-sbom`.
+Older packages remain readable. A failed scan clears stale SBOM evidence, and a
+changed source, IPA, archive or document requires regeneration. The scan does not
+replace independent signature verification or establish isolated build provenance.
+
 For consumers using the legacy release-record contract, these are still cutover
-blockers: isolated SLSA generator and source/runtime SBOM parity, durable immutable
+blockers: isolated SLSA generator parity, durable immutable
 GitHub release records beyond Actions retention, and attested metadata-only updates
 without rebuilding the IPA. The native package has GitHub build provenance; that
 must not be described as the legacy pipeline's isolated SLSA proof. App-specific

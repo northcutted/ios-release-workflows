@@ -246,7 +246,14 @@ fn candidate(app: &App) -> store::Release {
     )
     .unwrap();
     fsutil::json(&app.root.join("build/rust-archive.json"),&json!({"version":"1.2.3","build_number":"7","inputs_sha256":source::fingerprint(&app.root).unwrap(),"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),"run_id":std::env::var("GITHUB_RUN_ID").ok(),"ipa_sha256":fsutil::sha256(&app.root.join("build/application.ipa")).unwrap(),"symbols_sha256":fsutil::sha256(&app.root.join("build/symbols.zip")).unwrap(),"applications":[{"bundle_id":app.config["app_store"]["bundle_id"],"version":"1.2.3","build_number":"7","profile_uuid":"11111111-1111-1111-1111-111111111111","profile_sha256":"a".repeat(64),"certificate_sha256":"b".repeat(64),"executable_sha256":"c".repeat(64),"binary_uuids":["UUID (arm64)"]}]})).unwrap();
-    release::seal(app, "1.2.3", "7", &app.root.join("build/native-release")).unwrap();
+    release::seal(
+        app,
+        "1.2.3",
+        "7",
+        &app.root.join("build/native-release"),
+        false,
+    )
+    .unwrap();
     store::Release::load(app, &app.root.join("build/native-release")).unwrap()
 }
 
@@ -430,7 +437,56 @@ fn receipts_are_bound_to_one_app_version_and_ipa() {
 fn sealed_releases_cannot_be_overwritten() {
     let (_root, app) = app();
     let release = candidate(&app);
-    assert!(release::seal(&app, "1.2.3", "7", &release.directory).is_err());
+    assert!(release::seal(&app, "1.2.3", "7", &release.directory, false).is_err());
+}
+
+#[test]
+fn sealed_sboms_roundtrip_and_reject_partial_or_cross_archive_evidence() {
+    let (_root, mut app) = app();
+    // Release loading enforces the CI repository; keep the fixture in that scope.
+    let repository = std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "owner/app".into());
+    app.config["repository"] = json!(repository);
+    app.save().unwrap();
+    let original = candidate(&app);
+    let missing = app.root.join("build/missing-sbom");
+    assert!(release::seal(&app, "1.2.3", "7", &missing, true).is_err());
+    assert!(!missing.exists());
+    let archive_path = app.root.join("build/rust-archive.json");
+    let archive: Value = serde_json::from_slice(&fs::read(&archive_path).unwrap()).unwrap();
+    let folder = app.root.join("build/sbom");
+    let document = json!({"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","SPDXID":"SPDXRef-DOCUMENT",
+        "documentNamespace":"https://example.invalid/fixture","creationInfo":{"creators":["Tool: syft-1.44.0"]},"packages":[]});
+    for name in ["source.spdx.json", "ipa.spdx.json"] {
+        fsutil::json(&folder.join(name), &document).unwrap();
+    }
+    let report = json!({"schema_version":1,"generator":{"name":"syft","version":"1.44.0"},"repository":repository,
+        "archive_sha256":fsutil::sha256(&archive_path).unwrap(),"source_sha":archive["source_sha"],"run_id":archive["run_id"],
+        "inputs_sha256":archive["inputs_sha256"],"ipa_sha256":archive["ipa_sha256"],
+        "files":{"source.spdx.json":fsutil::sha256(&folder.join("source.spdx.json")).unwrap(),"ipa.spdx.json":fsutil::sha256(&folder.join("ipa.spdx.json")).unwrap()}});
+    fsutil::json(&folder.join("sbom.json"), &report).unwrap();
+    let sealed = app.root.join("build/with-sbom");
+    let manifest = release::seal(&app, "1.2.3", "7", &sealed, true).unwrap();
+    assert_eq!(manifest["ipa_sha256"], original.manifest["ipa_sha256"]);
+    let package = app.root.join("build/with-sbom.zip");
+    release::pack(&app, &sealed, &package).unwrap();
+    let unpacked = app.root.join("build/sbom-unpacked");
+    ios_release_native::content::unpack(&app, &package, &unpacked).unwrap();
+    let restored = store::Release::load(&app, &unpacked).unwrap();
+    assert_eq!(restored.manifest, manifest);
+    let mut partial = manifest.clone();
+    partial["files"]
+        .as_object_mut()
+        .unwrap()
+        .remove("ipa.spdx.json");
+    assert!(ios_release_native::content::names(&partial).is_err());
+    // Even a report with refreshed outer hashes must identify the original archive.
+    let mut changed = report;
+    changed["archive_sha256"] = json!("f".repeat(64));
+    fsutil::json(&unpacked.join("sbom.json"), &changed).unwrap();
+    let mut rebound = manifest;
+    rebound["files"]["sbom.json"] = json!(fsutil::sha256(&unpacked.join("sbom.json")).unwrap());
+    fsutil::json(&unpacked.join("release.json"), &rebound).unwrap();
+    assert!(store::Release::load(&app, &unpacked).is_err());
 }
 #[test]
 fn project_changes_only_archive_app_and_extension_signing() {
