@@ -185,6 +185,9 @@ impl Release {
         crate::content::verify(&directory, &manifest)?;
         let archived: Value =
             serde_json::from_slice(&std::fs::read(directory.join("archive.json"))?)?;
+        if manifest["files"].get("source-snapshot.json").is_some() {
+            crate::source_snapshot::verify(&directory, &archived, &manifest["run_attempt"])?;
+        }
         if manifest["schema_version"] == 3 {
             ensure!(
                 archived["symbols_sha256"].as_str()

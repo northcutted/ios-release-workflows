@@ -184,6 +184,8 @@ enum Signing {
 }
 #[derive(Subcommand)]
 enum Release {
+    /// Retain materialized committed-path inputs before compiling; requires SOURCE_SHA.
+    Source,
     /// Inventory source dependencies and the independently verified IPA using reviewed Syft.
     Sbom,
     /// Hash the exact sealed package, manifest and IPA for the isolated generator.
@@ -208,6 +210,8 @@ enum Release {
         version: String,
         #[arg(long)]
         build_number: String,
+        #[arg(long)]
+        require_source: bool,
     },
     Pack {
         #[arg(long, default_value = "build/native-release")]
@@ -233,6 +237,9 @@ enum Release {
         /// Require source/runtime SBOMs bound to this independently verified archive.
         #[arg(long)]
         require_sbom: bool,
+        /// Require the materialized source snapshot from the build job.
+        #[arg(long)]
+        require_source: bool,
     },
     NextBuildNumber {
         /// Use the monotonic Actions run number plus build_number_offset; reject collisions.
@@ -601,7 +608,13 @@ fn run(cli: Cli) -> Result<i32> {
                     );
                     return Ok(0);
                 }
-                if matches!(action, Release::Sbom) {
+                if matches!(action, Release::Source) {
+                    println!(
+                        "{}",
+                        json!({"operation":"release-source","output":"build/source-snapshot","scope":"tracked-materialized-build-inputs-v1","executes_app_code":false,"requires_selected_commit":true})
+                    );
+                    return Ok(0);
+                } else if matches!(action, Release::Sbom) {
                     println!(
                         "{}",
                         json!({"operation":"release-sbom","steps":["verify source and IPA against archive evidence","scan source and IPA with reviewed Syft","bind runtime inventory and SBOM hashes to the archive"],"output":"build/sbom","executes_app_code":false})
@@ -661,6 +674,7 @@ fn run(cli: Cli) -> Result<i32> {
                     build_number,
                     output,
                     require_sbom,
+                    require_source,
                 } => {
                     println!(
                         "{}",
@@ -669,7 +683,8 @@ fn run(cli: Cli) -> Result<i32> {
                             &version,
                             &build_number,
                             &app.root.join(output),
-                            require_sbom
+                            require_sbom,
+                            require_source
                         )?)?
                     );
                 }
@@ -696,6 +711,14 @@ fn run(cli: Cli) -> Result<i32> {
                         )?)?
                     );
                 }
+                Release::Source => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &ios_release_native::source_snapshot::capture(&app, &mut executor)?
+                        )?
+                    );
+                }
                 Release::Build {
                     version,
                     build_number,
@@ -710,7 +733,14 @@ fn run(cli: Cli) -> Result<i32> {
                 Release::VerifyArchive {
                     version,
                     build_number,
-                } => release::verify_archive(&app, &version, &build_number, &mut executor)?,
+                    require_source,
+                } => release::verify_archive(
+                    &app,
+                    &version,
+                    &build_number,
+                    &mut executor,
+                    require_source,
+                )?,
                 Release::Pack {
                     release: directory,
                     output,

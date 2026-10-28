@@ -22,6 +22,7 @@ pub mod signing;
 pub mod signing_inputs;
 pub mod simulator;
 pub mod source;
+pub mod source_snapshot;
 pub mod store;
 pub mod toolchain;
 pub mod vault;

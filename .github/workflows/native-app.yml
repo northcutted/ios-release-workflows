@@ -208,6 +208,8 @@ jobs:
       - *native
       - *download_signing
       - run: ios-release signing apply --input build/native-signing/signing.json
+      - name: Preserve materialized inputs before compiling
+        run: ios-release release source
       - name: Archive and export without an Apple API key
         run: ios-release release build --version "$VERSION" --build-number "$BUILD_NUMBER"
         env:
@@ -221,6 +223,7 @@ jobs:
           path: |
             ${{ inputs.app_root }}/build/application.ipa
             ${{ inputs.app_root }}/build/application.xcarchive/dSYMs/
+            ${{ inputs.app_root }}/build/source-snapshot/
           if-no-files-found: error
           retention-days: 90
     env: *source_env
@@ -242,7 +245,7 @@ jobs:
           merge-multiple: true
           path: ${{ inputs.app_root }}/build/
       - name: Verify exported bundles, entitlements, profiles and dSYMs
-        run: ios-release release verify-archive --version "$VERSION" --build-number "$BUILD_NUMBER"
+        run: ios-release release verify-archive --version "$VERSION" --build-number "$BUILD_NUMBER" --require-source
         env:
           VERSION: ${{ needs.signing.outputs.version }}
           BUILD_NUMBER: ${{ needs.signing.outputs.number }}
@@ -254,6 +257,7 @@ jobs:
             ${{ inputs.app_root }}/build/application.ipa
             ${{ inputs.app_root }}/build/rust-archive.json
             ${{ inputs.app_root }}/build/symbols.zip
+            ${{ inputs.app_root }}/build/source-snapshot/
           if-no-files-found: error
           retention-days: 90
     env: *source_env
@@ -292,7 +296,7 @@ jobs:
       - name: Bind all successful QA to the verified binary and prepare its package
         run: |
           ios-release version --requested "$VERSION"
-          ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER" --require-sbom
+          ios-release release seal --version "$VERSION" --build-number "$BUILD_NUMBER" --require-sbom --require-source
           ios-release release pack
         env:
           VERSION: ${{ needs.signing.outputs.version }}

@@ -1,4 +1,8 @@
 from pathlib import Path
+import json
+import os
+import subprocess
+import tempfile
 import unittest
 
 from ios_release.policy import validate
@@ -8,6 +12,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_picstrip_source_capture_sets_the_consumer_identity_in_the_child_process(self):
+        job = workflows(ROOT / ".github/workflows")["rust-checks.yml"]["jobs"]["store-inputs"]
+        checkout = next(s["with"] for s in job["steps"] if s.get("with", {}).get("path") == "consumer")
+        step = next(s for s in job["steps"] if "release source" in s.get("run", ""))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "platform/rust/target/release/ios-release"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/usr/bin/env python3\nimport json, os, sys\nprint(json.dumps({'repository': os.environ['GITHUB_REPOSITORY'], 'source': os.environ['SOURCE_SHA'], 'args': sys.argv[1:]}))\n")
+            binary.chmod(0o755)
+            output = root / "consumer/build/native-readiness/source-snapshot.json"
+            output.parent.mkdir(parents=True)
+            # Actions supplies reserved defaults after YAML env. Exercise the actual
+            # shell command, not a Python subprocess environment that masks this rule.
+            env = {**os.environ, **step.get("env", {}), "GITHUB_REPOSITORY": "northcutted/ios-release-workflows"}
+            subprocess.run(["bash", "-e", "-c", step["run"]], cwd=root, env=env, check=True, capture_output=True)
+            actual = json.loads(output.read_text())
+            self.assertEqual(actual["repository"], checkout["repository"])
+            self.assertEqual(actual["source"], checkout["ref"])
+            self.assertEqual(actual["args"], ["--app-root", "consumer", "release", "source"])
+
     def test_durable_records_preserve_publisher_boundary_and_interrupted_receipts(self):
         for change in ["environment", "token", "authority", "artifact", "apple", "interrupted", "bundle", "verifier"]:
             w = workflows(ROOT / ".github/workflows")
@@ -54,6 +79,24 @@ class PolicyTests(unittest.TestCase):
                 if "run" in step:
                     step["run"] = step["run"].replace(omitted, "omitted")
             self.assertIn("require source/runtime SBOMs", "\n".join(validate(w)))
+
+    def test_native_source_snapshot_cannot_be_omitted_recreated_after_build_or_unchecked(self):
+        for change in ["omit", "late", "credentials", "optional", "verify", "seal", "build-upload", "verify-upload"]:
+            w = workflows(ROOT / ".github/workflows")
+            jobs = w["native-app.yml"]["jobs"]
+            steps = jobs["build"]["steps"]
+            capture = next(s for s in steps if s.get("run") == "ios-release release source")
+            if change == "omit": steps.remove(capture)
+            elif change == "late": steps.remove(capture); steps.append(capture)
+            elif change == "credentials": capture["env"] = {"IOS_RELEASE_SIGNING_PASSWORD": "secret"}
+            elif change == "optional": capture["continue-on-error"] = True
+            elif change in ["verify", "seal"]:
+                for step in jobs[change]["steps"]:
+                    if "run" in step: step["run"] = step["run"].replace("--require-source", "")
+            else:
+                upload = next(s["with"] for s in jobs[change.split("-")[0]]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+                upload["path"] = upload["path"].replace("${{ inputs.app_root }}/build/source-snapshot/", "")
+            self.assertIn("source snapshot", "\n".join(validate(w)), change)
 
     def test_native_rehearsal_cannot_receive_secrets_or_sign_provenance(self):
         for field, value in [("environment", "native-signing"), ("permissions", {"id-token": "write"})]:

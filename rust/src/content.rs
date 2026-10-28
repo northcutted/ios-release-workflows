@@ -122,7 +122,13 @@ fn validate_name(name: &str) -> Result<()> {
             || store
             || matches!(
                 name,
-                "symbols.zip" | "source.spdx.json" | "ipa.spdx.json" | "sbom.json" | "version.json"
+                "symbols.zip"
+                    | "source.spdx.json"
+                    | "ipa.spdx.json"
+                    | "sbom.json"
+                    | "version.json"
+                    | "release-source.zip"
+                    | "source-snapshot.json"
             ),
         "Unexpected release input: {name}"
     );
@@ -163,6 +169,10 @@ pub fn names(manifest: &Value) -> Result<Vec<String>> {
         sboms.iter().all(|s| !files.contains_key(*s))
             || sboms.iter().all(|s| files.contains_key(*s)),
         "Release has a partial SBOM package"
+    );
+    ensure!(
+        files.contains_key("release-source.zip") == files.contains_key("source-snapshot.json"),
+        "Release has a partial source snapshot"
     );
     Ok(files
         .keys()

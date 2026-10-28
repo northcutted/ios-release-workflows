@@ -108,6 +108,20 @@ def validate(items):
         check("install_syft.sh" in seal_scripts and "ios-release release sbom" in seal_scripts
               and re.search(r"ios-release release seal[^\n]*--require-sbom", seal_scripts),
               "Native preparation must generate and require source/runtime SBOMs")
+        build_steps = native["build"]["steps"]
+        captures = [i for i, s in enumerate(build_steps) if s.get("run") == "ios-release release source"]
+        builds = [i for i, s in enumerate(build_steps) if "ios-release release build" in s.get("run", "")]
+        check(len(captures) == 1 and len(builds) == 1 and captures[0] < builds[0]
+              and not build_steps[captures[0]].get("env") and not build_steps[captures[0]].get("continue-on-error"),
+              "Native source snapshot must run before compilation without credentials")
+        verify_scripts = "\n".join(s.get("run", "") for s in native["verify"]["steps"])
+        check(re.search(r"ios-release release verify-archive[^\n]*--require-source", verify_scripts)
+              and re.search(r"ios-release release seal[^\n]*--require-source", seal_scripts),
+              "Native verification and sealing must require the build source snapshot")
+        for job in ["build", "verify"]:
+            upload = next(s["with"] for s in native[job]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+            check("${{ inputs.app_root }}/build/source-snapshot/" in upload.get("path", ""),
+                  "Native build and verification must retain the original source snapshot")
         for name, upstream in [("record_preparation", "preparation"), ("record_receipt", "receipt")]:
             job = native[name]
             body = json.dumps(job)

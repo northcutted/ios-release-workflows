@@ -19,6 +19,8 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path};
 #[path = "support/records.rs"]
 mod record_tests;
+#[path = "support/source_snapshot.rs"]
+mod source_snapshot_tests;
 mod support;
 
 const PASSWORD: &str = "separate signing test password";
@@ -402,6 +404,7 @@ fn candidate(app: &App) -> store::Release {
         "7",
         &app.root.join("build/native-release"),
         false,
+        false,
     )
     .unwrap();
     store::Release::load(app, &app.root.join("build/native-release")).unwrap()
@@ -587,7 +590,7 @@ fn receipts_are_bound_to_one_app_version_and_ipa() {
 fn sealed_releases_cannot_be_overwritten() {
     let (_root, app) = app();
     let release = candidate(&app);
-    assert!(release::seal(&app, "1.2.3", "7", &release.directory, false).is_err());
+    assert!(release::seal(&app, "1.2.3", "7", &release.directory, false, false).is_err());
 }
 
 #[test]
@@ -599,7 +602,7 @@ fn sealed_sboms_roundtrip_and_reject_partial_or_cross_archive_evidence() {
     app.save().unwrap();
     let original = candidate(&app);
     let missing = app.root.join("build/missing-sbom");
-    assert!(release::seal(&app, "1.2.3", "7", &missing, true).is_err());
+    assert!(release::seal(&app, "1.2.3", "7", &missing, true, false).is_err());
     assert!(!missing.exists());
     let archive_path = app.root.join("build/rust-archive.json");
     let archive: Value = serde_json::from_slice(&fs::read(&archive_path).unwrap()).unwrap();
@@ -615,7 +618,7 @@ fn sealed_sboms_roundtrip_and_reject_partial_or_cross_archive_evidence() {
         "files":{"source.spdx.json":fsutil::sha256(&folder.join("source.spdx.json")).unwrap(),"ipa.spdx.json":fsutil::sha256(&folder.join("ipa.spdx.json")).unwrap()}});
     fsutil::json(&folder.join("sbom.json"), &report).unwrap();
     let sealed = app.root.join("build/with-sbom");
-    let manifest = release::seal(&app, "1.2.3", "7", &sealed, true).unwrap();
+    let manifest = release::seal(&app, "1.2.3", "7", &sealed, true, false).unwrap();
     assert_eq!(manifest["ipa_sha256"], original.manifest["ipa_sha256"]);
     let package = app.root.join("build/with-sbom.zip");
     release::pack(&app, &sealed, &package).unwrap();

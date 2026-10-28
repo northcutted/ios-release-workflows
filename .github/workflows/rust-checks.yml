@@ -243,9 +243,17 @@ jobs:
         env:
           SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
           TZ: UTC
+      - name: Retain the immutable PicStrip materialized source without signing credentials
+        run: >-
+          GITHUB_REPOSITORY=northcutted/picstrip platform/rust/target/release/ios-release --app-root consumer release source
+          > consumer/build/native-readiness/source-snapshot.json
+        env:
+          SOURCE_SHA: 04d874a305d75764266cf68af5a0449d1afeed2b
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rust-picstrip-store-inputs
-          path: consumer/build/native-readiness/
+          path: |
+            consumer/build/native-readiness/
+            consumer/build/source-snapshot/
           if-no-files-found: error
           retention-days: 14
