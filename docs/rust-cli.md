@@ -41,6 +41,7 @@ Use the binary by its full path while evaluating it. Do not replace the existing
 | `init`, `auth login` | Discovers an app and stores its Apple API key privately |
 | `signing sync`, `signing import`, `signing status` | Reconciles owned certificates/profiles, imports existing identities and reports renewal state |
 | `qa all`, `release prepare` | Runs configured QA and prepares a source-bound signed release |
+| `release source`, `release seal --require-source` | Captures materialized committed-path build inputs before compilation and requires their verified archive when sealing |
 | `github setup`, `github fetch` | Configures protected native environments or downloads an authenticated preparation and recovery receipt |
 | `github record-preparation`, `github record-receipt` | Authenticates and preserves immutable recovery records using the scoped publisher App |
 | `store upload`, `store wait`, `store testflight` | Transfers the exact IPA, reconciles Apple processing and assigns beta groups |

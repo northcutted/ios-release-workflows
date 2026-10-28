@@ -52,6 +52,7 @@ pub fn seal(
     number: &str,
     directory: &Path,
     require_sbom: bool,
+    require_source: bool,
 ) -> Result<Value> {
     app.require_archive()?;
     let qa = verify_qa(app)?;
@@ -94,6 +95,20 @@ pub fn seal(
     fs::copy(symbols, staged.join("symbols.zip"))?;
     if require_sbom || app.root.join("build/sbom").exists() {
         crate::sbom::attach(app, staged)?;
+    }
+    crate::source_snapshot::check_build(app, &archive, require_source)?;
+    if app.root.join("build/source-snapshot").exists() {
+        for name in crate::source_snapshot::FILES {
+            fs::copy(
+                app.root.join("build/source-snapshot").join(name),
+                staged.join(name),
+            )?;
+        }
+        crate::source_snapshot::verify(
+            staged,
+            &archive,
+            &json!(std::env::var("GITHUB_RUN_ATTEMPT").ok()),
+        )?;
     }
     let decision = app.root.join("build/version/semantic-release.json");
     if decision.exists() {
@@ -203,7 +218,7 @@ pub fn prepare(
     }
     build(app, version, number, executor, managed)?;
     let directory = app.root.join("build/native-release");
-    let value = seal(app, version, number, &directory, false)?;
+    let value = seal(app, version, number, &directory, false, false)?;
     println!(
         "Release prepared at {}. Next: ios-release store upload --release {}, then store wait and store stage.",
         directory.display(),
@@ -223,15 +238,22 @@ pub fn build(
     } else {
         None
     };
-    archive::run(app, version, number, executor)
+    archive::run(app, version, number, executor)?;
+    let archive: Value =
+        serde_json::from_slice(&fs::read(app.root.join("build/rust-archive.json"))?)?;
+    crate::source_snapshot::check_build(app, &archive, false)
 }
 pub fn verify_archive(
     app: &App,
     version: &str,
     number: &str,
     executor: &mut impl Executor,
+    require_source: bool,
 ) -> Result<()> {
     app.require_archive()?;
+    let identity = json!({"source_sha":std::env::var("SOURCE_SHA").or_else(|_|std::env::var("GITHUB_SHA")).ok(),
+        "run_id":std::env::var("GITHUB_RUN_ID").ok(),"inputs_sha256":crate::source::fingerprint(&app.root)?});
+    crate::source_snapshot::check_build(app, &identity, require_source)?;
     let ipa = app.root.join("build/application.ipa");
     let inventory = archive::verify(app, &ipa, version, number, executor)?;
     let symbols_sha256 = archive::package_symbols(app)?;

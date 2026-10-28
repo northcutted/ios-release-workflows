@@ -55,6 +55,24 @@ class PolicyTests(unittest.TestCase):
                     step["run"] = step["run"].replace(omitted, "omitted")
             self.assertIn("require source/runtime SBOMs", "\n".join(validate(w)))
 
+    def test_native_source_snapshot_cannot_be_omitted_recreated_after_build_or_unchecked(self):
+        for change in ["omit", "late", "credentials", "optional", "verify", "seal", "build-upload", "verify-upload"]:
+            w = workflows(ROOT / ".github/workflows")
+            jobs = w["native-app.yml"]["jobs"]
+            steps = jobs["build"]["steps"]
+            capture = next(s for s in steps if s.get("run") == "ios-release release source")
+            if change == "omit": steps.remove(capture)
+            elif change == "late": steps.remove(capture); steps.append(capture)
+            elif change == "credentials": capture["env"] = {"IOS_RELEASE_SIGNING_PASSWORD": "secret"}
+            elif change == "optional": capture["continue-on-error"] = True
+            elif change in ["verify", "seal"]:
+                for step in jobs[change]["steps"]:
+                    if "run" in step: step["run"] = step["run"].replace("--require-source", "")
+            else:
+                upload = next(s["with"] for s in jobs[change.split("-")[0]]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+                upload["path"] = upload["path"].replace("${{ inputs.app_root }}/build/source-snapshot/", "")
+            self.assertIn("source snapshot", "\n".join(validate(w)), change)
+
     def test_native_rehearsal_cannot_receive_secrets_or_sign_provenance(self):
         for field, value in [("environment", "native-signing"), ("permissions", {"id-token": "write"})]:
             w = workflows(ROOT / ".github/workflows")

@@ -306,6 +306,35 @@ Older packages remain readable. A failed scan clears stale SBOM evidence, and a
 changed source, IPA, archive or document requires regeneration. The scan does not
 replace independent signature verification or establish isolated build provenance.
 
+Native preparation captures `release-source.zip` and `source-snapshot.json` on the
+build runner after applying signing configuration and before compiling. The ZIP
+retains materialized files, including hydrated LFS assets and the configured
+project, with committed executable modes. It uses the same input scope as native
+QA/archive fingerprints: `.git`, `build`, `qa-results`, `target`, `.build`,
+`.ios-release`, `store`, `node_modules`, `Pods`, `DerivedData`, `xcuserdata`,
+`.venv`, and `__pycache__` directories are
+excluded wherever they occur. Public store content is retained separately in the
+sealed package. This snapshot does not contain Xcode/SDK installations, downloaded
+dependency caches, or signing credentials; retain the encrypted signing vault
+separately and restore dependencies from the committed lockfiles.
+
+Every included path must exist in the selected commit. Untracked/missing inputs,
+symlinks, submodules and unresolved LFS pointers stop capture. The snapshot stores
+the actual working-tree bytes because signing configuration may differ from Git.
+Independent verification and sealing require the original build-runner snapshot
+and compare every file, the aggregate input fingerprint, source commit, run and
+attempt. Recovery rechecks the nested ZIP without executing or extracting its
+source. It is covered by the sealed package's existing attestations and durable
+preparation record.
+
+For local preparation, set `SOURCE_SHA` to the full checked-out commit and run
+`ios-release release source` after signing configuration but before
+`ios-release release build`. Transfer `build/source-snapshot/` with the IPA and
+symbols, verify with `ios-release release verify-archive --version VERSION
+--build-number NUMBER --require-source`, and add `--require-source` when sealing.
+Failed recapture removes stale source evidence. Older packages without source
+snapshots remain readable; they do not gain source-retention guarantees.
+
 Native preparation now also invokes the same [isolated SLSA generator](https://github.com/slsa-framework/slsa-github-generator/blob/v2.1.0/.github/workflows/generator_generic_slsa3.yml)
 as the legacy pipeline. Its three subjects are the sealed package, `release.json`
 and exact IPA. A separate job verifies both the retained GitHub attestation bundle
@@ -329,9 +358,10 @@ identities and missing proofs. A new native main-branch preparation must still
 prove the complete generator-to-delivery path; the legacy fixture is not native
 signing or Apple-delivery evidence.
 
-For consumers using the legacy release-record contract, these implementation
-gaps remain: a complete source/build-input archive, stable version-tag publication,
-and attested metadata-only updates without rebuilding the IPA. The opt-in durable
+For consumers using the legacy release-record contract, implementation gaps remain
+in stable version-tag publication and attested metadata-only updates without
+rebuilding the IPA. Source snapshots still need a live native preparation rehearsal.
+The opt-in durable
 preparation/receipt records also require a live publisher and interrupted-recovery
 rehearsal before cutover. App-specific artwork
 composition may continue to need its existing tooling.
