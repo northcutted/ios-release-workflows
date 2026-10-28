@@ -1,4 +1,8 @@
 from pathlib import Path
+import json
+import os
+import subprocess
+import tempfile
 import unittest
 
 from ios_release.policy import validate
@@ -8,6 +12,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_picstrip_source_capture_sets_the_consumer_identity_in_the_child_process(self):
+        job = workflows(ROOT / ".github/workflows")["rust-checks.yml"]["jobs"]["store-inputs"]
+        checkout = next(s["with"] for s in job["steps"] if s.get("with", {}).get("path") == "consumer")
+        step = next(s for s in job["steps"] if "release source" in s.get("run", ""))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "platform/rust/target/release/ios-release"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/usr/bin/env python3\nimport json, os, sys\nprint(json.dumps({'repository': os.environ['GITHUB_REPOSITORY'], 'source': os.environ['SOURCE_SHA'], 'args': sys.argv[1:]}))\n")
+            binary.chmod(0o755)
+            output = root / "consumer/build/native-readiness/source-snapshot.json"
+            output.parent.mkdir(parents=True)
+            # Actions supplies reserved defaults after YAML env. Exercise the actual
+            # shell command, not a Python subprocess environment that masks this rule.
+            env = {**os.environ, **step.get("env", {}), "GITHUB_REPOSITORY": "northcutted/ios-release-workflows"}
+            subprocess.run(["bash", "-e", "-c", step["run"]], cwd=root, env=env, check=True, capture_output=True)
+            actual = json.loads(output.read_text())
+            self.assertEqual(actual["repository"], checkout["repository"])
+            self.assertEqual(actual["source"], checkout["ref"])
+            self.assertEqual(actual["args"], ["--app-root", "consumer", "release", "source"])
+
     def test_durable_records_preserve_publisher_boundary_and_interrupted_receipts(self):
         for change in ["environment", "token", "authority", "artifact", "apple", "interrupted", "bundle", "verifier"]:
             w = workflows(ROOT / ".github/workflows")
