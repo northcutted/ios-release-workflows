@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-gem "fastlane", "~> 2.240"
+gem "fastlane", "~> 2.241"
 
 group :test do
   gem "minitest", "~> 6.0"
